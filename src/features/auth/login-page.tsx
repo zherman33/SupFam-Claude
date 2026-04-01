@@ -1,7 +1,7 @@
 import { useAuth } from './auth-context'
 
 export function LoginPage() {
-  const { signInWithGoogle } = useAuth()
+  const { signInWithGoogle, error } = useAuth()
 
   return (
     <div className="flex min-h-svh items-center justify-center bg-cream-100">
@@ -12,6 +12,12 @@ export function LoginPage() {
         <p className="mt-2 font-display text-lg text-brown-700">
           The family dashboard that runs the house.
         </p>
+
+        {error && (
+          <div className="mt-4 rounded-lg bg-terracotta-500/10 p-3 text-left text-sm text-terracotta-600">
+            {error}
+          </div>
+        )}
 
         <button
           onClick={signInWithGoogle}

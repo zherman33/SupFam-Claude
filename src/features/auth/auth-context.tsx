@@ -12,6 +12,7 @@ interface AuthState {
   session: Session | null
   user: User | null
   loading: boolean
+  error: string | null
   signInWithGoogle: () => Promise<void>
   signOut: () => Promise<void>
 }
@@ -21,6 +22,7 @@ const AuthContext = createContext<AuthState | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     // Get initial session
@@ -46,13 +48,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signInWithGoogle = async () => {
-    await supabase.auth.signInWithOAuth({
+    setError(null)
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         scopes: 'https://www.googleapis.com/auth/calendar.readonly',
         redirectTo: window.location.origin,
       },
     })
+    if (error) {
+      if (error.message.includes('provider')) {
+        setError(
+          'Google sign-in is not enabled yet. Please enable the Google provider in your Supabase project settings (Authentication → Providers → Google).'
+        )
+      } else {
+        setError(error.message)
+      }
+    }
   }
 
   const signOut = async () => {
@@ -65,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session,
         user: session?.user ?? null,
         loading,
+        error,
         signInWithGoogle,
         signOut,
       }}
