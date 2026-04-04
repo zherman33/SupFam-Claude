@@ -23,8 +23,8 @@ interface CalendarViewProps {
   headerRight?: React.ReactNode
 }
 
-const MAX_VISIBLE_MONTH = 3
-const MAX_VISIBLE_WEEK = 8  // more room in single-week view
+const MAX_VISIBLE_MONTH = 2  // taller pills need fewer rows per cell
+const MAX_VISIBLE_WEEK = 6  // more room in single-week view
 
 export function CalendarView({
   tasks = [],
@@ -278,19 +278,31 @@ function EventPill({ ev }: { ev: CalendarEvent }) {
   const color = ev.color ?? '#5B7FB5'
   return (
     <div
-      className="flex items-center gap-0.5 rounded px-1 py-px overflow-hidden flex-shrink-0"
-      style={{ backgroundColor: `${color}20` }}
+      className="flex items-stretch rounded overflow-hidden flex-shrink-0"
+      style={{ backgroundColor: `${color}18` }}
       title={ev.title}
     >
-      <span className="inline-block h-1.5 w-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-      {!ev.all_day && (
-        <span className="text-[10px] tabular-nums opacity-55 leading-tight flex-shrink-0" style={{ color }}>
-          {format(parseISO(ev.start_at), 'h:mm')}
+      {/* Left color bar */}
+      <div className="w-[3px] flex-shrink-0 rounded-l" style={{ backgroundColor: color }} />
+
+      <div className="flex items-baseline gap-1 px-1 py-px min-w-0 flex-1">
+        {/* Event name — primary, large */}
+        <span
+          className="truncate text-[13px] font-semibold leading-snug"
+          style={{ color }}
+        >
+          {ev.title}
         </span>
-      )}
-      <span className="truncate text-[10px] font-semibold leading-tight" style={{ color }}>
-        {ev.title}
-      </span>
+        {/* Time — secondary, after the name */}
+        {!ev.all_day && (
+          <span
+            className="flex-shrink-0 text-[10px] tabular-nums leading-snug"
+            style={{ color, opacity: 0.55 }}
+          >
+            {format(parseISO(ev.start_at), 'h:mma').replace(':00', '')}
+          </span>
+        )}
+      </div>
     </div>
   )
 }
@@ -299,14 +311,17 @@ function TaskPill({ task }: { task: Task }) {
   const color = task.assigned_member?.avatar_color ?? '#C4714F'
   return (
     <div
-      className="flex items-center gap-0.5 rounded px-1 py-px overflow-hidden flex-shrink-0"
+      className="flex items-stretch rounded overflow-hidden flex-shrink-0"
       style={{ backgroundColor: `${color}18` }}
       title={task.title}
     >
-      <span className="text-[9px] flex-shrink-0 leading-tight" style={{ color }}>☑</span>
-      <span className="truncate text-[10px] font-medium leading-tight" style={{ color }}>
-        {task.title}
-      </span>
+      <div className="w-[3px] flex-shrink-0 rounded-l opacity-40" style={{ backgroundColor: color }} />
+      <div className="flex items-center gap-1 px-1 py-px min-w-0">
+        <span className="text-[10px] flex-shrink-0" style={{ color, opacity: 0.6 }}>✓</span>
+        <span className="truncate text-[12px] font-medium leading-snug" style={{ color }}>
+          {task.title}
+        </span>
+      </div>
     </div>
   )
 }
