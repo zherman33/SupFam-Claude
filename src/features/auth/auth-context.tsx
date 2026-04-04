@@ -104,7 +104,9 @@ async function storeCalendarTokens(session: Session) {
   if (!member) return
 
   // Store OAuth tokens in google_tokens (one row per family member)
-  await supabase.from('google_tokens').upsert(
+  // Cast to any — google_tokens isn't in the generated DB types yet
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase.from('google_tokens') as any).upsert(
     {
       family_member_id: member.id,
       access_token: providerToken,
