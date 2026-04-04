@@ -8,9 +8,15 @@ import { Dashboard } from '@/features/dashboard/dashboard'
 export default function App() {
   const { user, loading } = useAuth()
   const queryClient = useQueryClient()
-  const { data: familyMember, isLoading: memberLoading } = useFamilyMember()
+  // isFetching: actively in-flight. isLoading: no data yet AND fetching.
+  // We only block on loading if the auth state is still resolving, or
+  // the member query is actively fetching (not retrying with backoff).
+  const { data: familyMember, isFetching: memberFetching } = useFamilyMember()
 
-  if (loading || (user && memberLoading)) {
+  // Only show the splash while:
+  // 1. Auth state is still resolving from Supabase
+  // 2. User is logged in and we're actively fetching their member record (first load)
+  if (loading || (user && memberFetching && familyMember === undefined)) {
     return (
       <div className="flex min-h-svh items-center justify-center bg-cream-100">
         <p className="font-handwritten text-2xl text-terracotta-500">Loading…</p>

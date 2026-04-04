@@ -36,6 +36,11 @@ export function useFamilyMember() {
       return data as FamilyMember
     },
     enabled: !!user,
+    // No retries — null result means "show setup screen" immediately,
+    // not hang in a loading state through exponential backoff
+    retry: false,
+    // Don't treat a null result as stale for 5 minutes once we have data
+    staleTime: 1000 * 60 * 5,
   })
 }
 
