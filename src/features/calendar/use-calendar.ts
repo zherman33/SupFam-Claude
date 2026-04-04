@@ -116,8 +116,10 @@ export function useToggleCalendarVisibility() {
     onError: (_err, _vars, ctx) => {
       if (ctx?.prev) queryClient.setQueryData(['connected-calendars', member?.family_id], ctx.prev)
     },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['connected-calendars', member?.family_id] })
+    onSuccess: () => {
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['connected-calendars', member?.family_id] })
+      }, 500)
     },
   })
 }
