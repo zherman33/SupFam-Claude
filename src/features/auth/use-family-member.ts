@@ -30,7 +30,7 @@ export function useFamilyMember() {
         .from('family_members')
         .select('*, families(*)')
         .eq('user_id', user.id)
-        .single()
+        .maybeSingle()
 
       if (error) return null
       return data as FamilyMember

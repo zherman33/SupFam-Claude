@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/features/auth/auth-context'
 import { useFamilyMember } from '@/features/auth/use-family-member'
 import { LoginPage } from '@/features/auth/login-page'
@@ -6,7 +7,8 @@ import { Dashboard } from '@/features/dashboard/dashboard'
 
 export default function App() {
   const { user, loading } = useAuth()
-  const { data: familyMember, isLoading: memberLoading, refetch } = useFamilyMember()
+  const queryClient = useQueryClient()
+  const { data: familyMember, isLoading: memberLoading } = useFamilyMember()
 
   if (loading || (user && memberLoading)) {
     return (
@@ -21,7 +23,15 @@ export default function App() {
   }
 
   if (!familyMember) {
-    return <FamilySetup onComplete={() => refetch()} />
+    return (
+      <FamilySetup
+        onComplete={() => {
+          // Invalidate all family-related queries so they refetch fresh
+          queryClient.invalidateQueries({ queryKey: ['family-member'] })
+          queryClient.invalidateQueries({ queryKey: ['family-members'] })
+        }}
+      />
+    )
   }
 
   return <Dashboard />
