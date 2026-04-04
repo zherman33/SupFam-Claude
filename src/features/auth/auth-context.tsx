@@ -99,23 +99,20 @@ async function storeCalendarTokens(session: Session) {
     .from('family_members')
     .select('id')
     .eq('user_id', userId)
-    .single()
+    .maybeSingle()
 
   if (!member) return
 
-  // Upsert the Google calendar connection
-  await supabase.from('connected_calendars').upsert(
+  // Store OAuth tokens in google_tokens (one row per family member)
+  await supabase.from('google_tokens').upsert(
     {
       family_member_id: member.id,
-      provider: 'google',
       access_token: providerToken,
       refresh_token: providerRefreshToken ?? null,
       token_expires_at: session.expires_at
         ? new Date(session.expires_at * 1000).toISOString()
         : null,
-      calendar_id: 'primary',
-      calendar_name: 'Google Calendar',
     },
-    { onConflict: 'family_member_id,provider' }
+    { onConflict: 'family_member_id' }
   )
 }
