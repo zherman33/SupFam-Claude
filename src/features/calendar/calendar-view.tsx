@@ -98,12 +98,7 @@ export function CalendarView({
           <h2 className="font-display text-lg font-semibold text-brown-800 tracking-tight">
             {navLabel}
           </h2>
-          <button
-            onClick={() => setOffset(0)}
-            className="rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-widest text-brown-700/40 hover:bg-sand-100 hover:text-brown-700 transition-colors"
-          >
-            Today
-          </button>
+
         </div>
 
         {/* Next */}
