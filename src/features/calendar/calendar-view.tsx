@@ -7,7 +7,7 @@ import {
   isSameMonth,
   parseISO,
 } from 'date-fns'
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import type { Task } from '@/features/tasks/use-tasks'
 import type { CalendarEvent } from './use-calendar'
 
@@ -19,10 +19,16 @@ interface CalendarViewProps {
   anchorDate?: Date
   mode?: CalendarMode
   onModeChange?: (mode: CalendarMode) => void
-  // Slot for extra controls rendered inside the calendar header (e.g. ⋯ menu)
   headerRight?: React.ReactNode
 }
 
+// How many weeks to render in the scroll window
+const WEEKS_BEFORE = 4
+const WEEKS_AFTER = 16
+const TOTAL_WEEKS = WEEKS_BEFORE + WEEKS_AFTER  // 20
+
+// Rows per "page" by mode
+const ROWS: Record<CalendarMode, number> = { week: 1, '3week': 3, month: 5 }
 
 export function CalendarView({
   tasks = [],
@@ -33,52 +39,46 @@ export function CalendarView({
   headerRight,
 }: CalendarViewProps) {
   const today = new Date()
-  const [offset, setOffset] = useState(0)
   const anchor = anchorDate ?? today
+  const rowsPerPage = ROWS[mode]
 
-  // Build the grid of weeks based on mode
-  const weeks = buildWeeks(anchor, offset, mode)
+  // Build ALL weeks once — 20 weeks starting WEEKS_BEFORE ago
+  const baseWeekStart = startOfWeek(addWeeks(anchor, -WEEKS_BEFORE), { weekStartsOn: 0 })
+  const allWeeks: Date[][] = Array.from({ length: TOTAL_WEEKS }, (_, wi) =>
+    Array.from({ length: 7 }, (_, di) => addDays(baseWeekStart, wi * 7 + di))
+  )
 
-  // The "representative" date for the month label — middle of the grid
-  const midWeek = weeks[Math.floor(weeks.length / 2)]
-  const midDay = midWeek[3]
+  // Scroll container ref
+  const scrollRef = useRef<HTMLDivElement>(null)
+  // Track which week row is at the top (for month label)
+  const [topWeekIdx, setTopWeekIdx] = useState(WEEKS_BEFORE)
 
-  const navLabel = navLabelFor(midDay, mode)
+  // Scroll to today on mount
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    // Each "page" = rowsPerPage rows. Find the page that contains today.
+    const todayPageIdx = Math.floor(WEEKS_BEFORE / rowsPerPage)
+    // Each page is 100% of the container height
+    el.scrollTop = todayPageIdx * el.clientHeight
+  }, [mode]) // re-anchor when mode changes
 
-  // ── Scroll / swipe navigation ────────────────────────────────────────────
-  // One wheel tick or one swipe = move 1 week forward/back regardless of mode
-  const wheelAccum = useRef(0)
-  const wheelTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const touchStartY = useRef<number | null>(null)
+  // Update month label as user scrolls
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const rowH = el.clientHeight / rowsPerPage
+    const topRow = Math.round(el.scrollTop / rowH)
+    setTopWeekIdx(topRow)
+  }, [rowsPerPage])
 
-  const nudge = useCallback((dir: 1 | -1) => {
-    setOffset(o => o + dir)
-  }, [])
+  // Month label: use the middle day of the middle visible row
+  const midVisibleRow = topWeekIdx + Math.floor(rowsPerPage / 2)
+  const safeRow = Math.min(Math.max(midVisibleRow, 0), TOTAL_WEEKS - 1)
+  const labelDay = allWeeks[safeRow]?.[3] ?? today
+  const monthLabel = format(labelDay, 'MMMM yyyy')
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault()
-    wheelAccum.current += e.deltaY
-    if (wheelTimer.current) clearTimeout(wheelTimer.current)
-    wheelTimer.current = setTimeout(() => {
-      if (Math.abs(wheelAccum.current) > 30) {
-        nudge(wheelAccum.current > 0 ? 1 : -1)
-      }
-      wheelAccum.current = 0
-    }, 80)
-  }, [nudge])
-
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    touchStartY.current = e.touches[0].clientY
-  }, [])
-
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (touchStartY.current === null) return
-    const dy = touchStartY.current - e.changedTouches[0].clientY
-    if (Math.abs(dy) > 40) nudge(dy > 0 ? 1 : -1)
-    touchStartY.current = null
-  }, [nudge])
-
-  // Index tasks by due date
+  // ── Index tasks ──────────────────────────────────────────────────────────
   const tasksByDate = new Map<string, Task[]>()
   for (const task of tasks) {
     if (!task.due_date || task.is_complete) continue
@@ -86,44 +86,30 @@ export function CalendarView({
     tasksByDate.get(task.due_date)!.push(task)
   }
 
-  // Index events by date.
-  // All-day events stored as UTC midnight — parse as local date string (YYYY-MM-DD)
-  // to avoid the UTC→local shift that would move them to the previous day.
-  // Multi-day events are expanded across every day they span.
+  // ── Index events — timezone-safe, multi-day expansion ───────────────────
   const eventsByDate = new Map<string, CalendarEvent[]>()
-
-  const addToDate = (key: string, ev: CalendarEvent) => {
+  const addEvToDate = (key: string, ev: CalendarEvent) => {
     if (!eventsByDate.has(key)) eventsByDate.set(key, [])
-    // Avoid duplicating multi-day events on a day (shouldn't happen but guard)
     if (!eventsByDate.get(key)!.find(e => e.id === ev.id)) {
       eventsByDate.get(key)!.push(ev)
     }
   }
-
   for (const ev of events) {
     if (ev.all_day) {
-      // For all-day events, use the date portion of the UTC string directly
-      // (avoids timezone shift: '2026-04-17T00:00:00+00' → '2026-04-17')
       const startKey = ev.start_at.slice(0, 10)
       const endKey = ev.end_at ? ev.end_at.slice(0, 10) : startKey
-      // Expand across every day [start, end) — Google all-day end is exclusive
       let cur = startKey
       while (cur < endKey) {
-        addToDate(cur, ev)
-        // Advance by 1 day
+        addEvToDate(cur, ev)
         const d = new Date(cur + 'T00:00:00')
         d.setDate(d.getDate() + 1)
         cur = format(d, 'yyyy-MM-dd')
       }
-      // If end === start (shouldn't happen but safety)
-      if (startKey === endKey) addToDate(startKey, ev)
+      if (startKey === endKey) addEvToDate(startKey, ev)
     } else {
-      // Timed events: convert from UTC to local date
-      const key = format(parseISO(ev.start_at), 'yyyy-MM-dd')
-      addToDate(key, ev)
+      addEvToDate(format(parseISO(ev.start_at), 'yyyy-MM-dd'), ev)
     }
   }
-
   for (const [, evs] of eventsByDate) {
     evs.sort((a, b) => {
       if (a.all_day && !b.all_day) return -1
@@ -133,43 +119,41 @@ export function CalendarView({
   }
 
   const DAY_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  const numRows = weeks.length
 
   return (
-    <div className="flex h-full flex-col select-none">
+    <div className="flex h-full flex-col select-none overflow-hidden">
 
-      {/* ── Calendar header row ──────────────────────────── */}
-      <div className="flex-shrink-0 flex items-center mb-3">
-
-        {/* Month/year — fully centered, handwritten font to match event names */}
-        <h2 className="flex-1 text-center font-handwritten text-2xl text-brown-800">
-          {navLabel}
+      {/* ── Header ── */}
+      <div className="relative flex-shrink-0 flex items-center h-9 mb-2">
+        {/* Month label — absolutely centered on the full width */}
+        <h2 className="absolute inset-x-0 text-center font-handwritten text-2xl text-brown-800 pointer-events-none">
+          {monthLabel}
         </h2>
 
-        {/* View switcher */}
-        {onModeChange && (
-          <div className="flex items-center gap-px rounded-lg bg-sand-100 p-0.5">
-            {(['week', '3week', 'month'] as CalendarMode[]).map(m => (
-              <button
-                key={m}
-                onClick={() => { onModeChange(m); setOffset(0) }}
-                className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                  mode === m
-                    ? 'bg-white text-brown-800 shadow-sm'
-                    : 'text-brown-700/50 hover:text-brown-800'
-                }`}
-              >
-                {m === '3week' ? '3 wk' : m === 'week' ? '1 wk' : 'Mo'}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Slot for extra controls (⋯ menu etc.) */}
-        {headerRight}
+        {/* Right controls — view switcher + ⋯ */}
+        <div className="ml-auto flex items-center gap-1.5 relative z-10">
+          {onModeChange && (
+            <div className="flex items-center gap-px rounded-lg bg-sand-100 p-0.5">
+              {(['week', '3week', 'month'] as CalendarMode[]).map(m => (
+                <button
+                  key={m}
+                  onClick={() => onModeChange(m)}
+                  className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                    mode === m
+                      ? 'bg-white text-brown-800 shadow-sm'
+                      : 'text-brown-700/50 hover:text-brown-800'
+                  }`}
+                >
+                  {m === '3week' ? '3 wk' : m === 'week' ? '1 wk' : 'Mo'}
+                </button>
+              ))}
+            </div>
+          )}
+          {headerRight}
+        </div>
       </div>
 
-      {/* ── Day-of-week headers ──────────────────────────── */}
+      {/* ── Day headers ── */}
       <div className="flex-shrink-0 grid grid-cols-7 border-b border-sand-100 pb-1.5 mb-0.5">
         {DAY_HEADERS.map((d, i) => (
           <div
@@ -183,129 +167,114 @@ export function CalendarView({
         ))}
       </div>
 
-      {/* ── Calendar grid ────────────────────────────────── */}
+      {/* ── Scroll container ── */}
+      {/*
+        Each "page" is rowsPerPage rows tall = 100% of the container.
+        scroll-snap-type: y mandatory snaps to each page.
+        Each row group is a snap point.
+        We render all 20 weeks up front — no lazy loading needed for 3 months.
+      */}
       <div
-        className="flex-1 min-h-0 grid"
-        style={{ gridTemplateRows: `repeat(${numRows}, 1fr)` }}
-        onWheel={handleWheel}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
+        ref={scrollRef}
+        className="flex-1 min-h-0 overflow-y-scroll"
+        style={{
+          scrollSnapType: 'y mandatory',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none',
+        }}
+        onScroll={handleScroll}
       >
-        {weeks.map((week, wi) => (
-          <div
-            key={wi}
-            className="grid grid-cols-7 border-b border-sand-100 last:border-0 min-h-0"
-          >
-            {week.map((day) => {
-              const key = format(day, 'yyyy-MM-dd')
-              const dayEvents = eventsByDate.get(key) ?? []
-              const dayTasks = tasksByDate.get(key) ?? []
-              const isCurrentDay = isToday(day)
-              const isOutsideMonth = mode === 'month' && !isSameMonth(day, midDay)
-              const isWeekend = day.getDay() === 0 || day.getDay() === 6
+        {/* Inner: total height = (TOTAL_WEEKS / rowsPerPage) pages */}
+        <div
+          style={{
+            height: `${(TOTAL_WEEKS / rowsPerPage) * 100}%`,
+            display: 'grid',
+            gridTemplateRows: `repeat(${TOTAL_WEEKS}, 1fr)`,
+          }}
+        >
+          {allWeeks.map((week, wi) => {
+            // Snap point at the start of each page
+            const isSnapPoint = wi % rowsPerPage === 0
+            return (
+              <div
+                key={wi}
+                className="grid grid-cols-7 border-b border-sand-100 last:border-0 min-h-0"
+                style={isSnapPoint ? { scrollSnapAlign: 'start' } : undefined}
+              >
+                {week.map((day) => {
+                  const key = format(day, 'yyyy-MM-dd')
+                  const dayEvents = eventsByDate.get(key) ?? []
+                  const dayTasks = tasksByDate.get(key) ?? []
+                  const isCurrentDay = isToday(day)
+                  const isOutsideMonth = mode === 'month' && !isSameMonth(day, labelDay)
+                  const isWeekend = day.getDay() === 0 || day.getDay() === 6
 
-              type Pill = { type: 'event'; ev: CalendarEvent } | { type: 'task'; task: Task }
-              const pills: Pill[] = [
-                ...dayEvents.map(ev => ({ type: 'event' as const, ev })),
-                ...dayTasks.map(task => ({ type: 'task' as const, task })),
-              ]
+                  type Pill = { type: 'event'; ev: CalendarEvent } | { type: 'task'; task: Task }
+                  const pills: Pill[] = [
+                    ...dayEvents.map(ev => ({ type: 'event' as const, ev })),
+                    ...dayTasks.map(task => ({ type: 'task' as const, task })),
+                  ]
 
-              return (
-                <div
-                  key={key}
-                  className={`relative flex flex-col border-r border-sand-100 last:border-r-0 overflow-hidden min-h-0
-                    ${isOutsideMonth ? 'opacity-25' : ''}
-                    ${isWeekend && !isCurrentDay ? 'bg-[#faf8f5]' : 'bg-white'}
-                    ${isCurrentDay ? 'bg-terracotta-500/[0.04]' : ''}
-                  `}
-                >
-                  {isCurrentDay && (
-                    <div className="absolute top-0 inset-x-0 h-[2px] bg-terracotta-500 rounded-b" />
-                  )}
-
-                  <div className="flex flex-col h-full p-1.5 gap-px">
-                    {/* Date number */}
-                    <div className="flex-shrink-0 mb-0.5">
-                      <span className={`
-                        inline-flex h-[18px] w-[18px] items-center justify-center rounded-full
-                        text-[10px] font-bold leading-none
-                        ${isCurrentDay
-                          ? 'bg-terracotta-500 text-white'
-                          : isWeekend
-                          ? 'text-brown-700/30'
-                          : 'text-brown-700/60'}
-                      `}>
-                        {format(day, 'd')}
-                      </span>
-                    </div>
-
-                    {/* Pills — CSS clips at the bottom, no hard count limit */}
-                    <div className="flex flex-col gap-px flex-1 min-h-0 overflow-hidden">
-                      {pills.map((pill) => pill.type === 'event'
-                        ? <EventPill key={`${pill.ev.id}-${format(day, 'yyyy-MM-dd')}`} ev={pill.ev} />
-                        : <TaskPill key={pill.task.id} task={pill.task} />
+                  return (
+                    <div
+                      key={key}
+                      className={`relative flex flex-col border-r border-sand-100 last:border-r-0 overflow-hidden min-h-0
+                        ${isOutsideMonth ? 'opacity-25' : ''}
+                        ${isWeekend && !isCurrentDay ? 'bg-[#faf8f5]' : 'bg-white'}
+                        ${isCurrentDay ? 'bg-terracotta-500/[0.04]' : ''}
+                      `}
+                    >
+                      {isCurrentDay && (
+                        <div className="absolute top-0 inset-x-0 h-[2px] bg-terracotta-500 rounded-b" />
                       )}
+                      <div className="flex flex-col h-full p-1.5 gap-px">
+                        <div className="flex-shrink-0 mb-0.5">
+                          <span className={`
+                            inline-flex h-[18px] w-[18px] items-center justify-center rounded-full
+                            text-[10px] font-bold leading-none
+                            ${isCurrentDay ? 'bg-terracotta-500 text-white'
+                              : isWeekend ? 'text-brown-700/30'
+                              : 'text-brown-700/60'}
+                          `}>
+                            {format(day, 'd')}
+                          </span>
+                        </div>
+                        <div className="flex flex-col gap-px flex-1 min-h-0 overflow-hidden">
+                          {pills.map((pill) => pill.type === 'event'
+                            ? <EventPill key={`${pill.ev.id}-${key}`} ev={pill.ev} />
+                            : <TaskPill key={pill.task.id} task={pill.task} />
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        ))}
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
       </div>
     </div>
   )
 }
 
-// ── Helper: build weeks grid ─────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────
 
-function buildWeeks(anchor: Date, offset: number, mode: CalendarMode): Date[][] {
-  const today = new Date()
-
-  if (mode === 'week') {
-    const base = startOfWeek(addWeeks(anchor, offset), { weekStartsOn: 0 })
-    return [Array.from({ length: 7 }, (_, i) => addDays(base, i))]
-  }
-
-  if (mode === '3week') {
-    // Rolling: current week at top, regardless of offset
-    const base = startOfWeek(addWeeks(today, offset), { weekStartsOn: 0 })
-    return Array.from({ length: 3 }, (_, wi) =>
-      Array.from({ length: 7 }, (_, di) => addDays(base, wi * 7 + di))
-    )
-  }
-
-  // month: 5 weeks anchored to the month containing anchor + offset months
-  // Use offset as week-offset for consistency with prev/next
-  const base = startOfWeek(addWeeks(anchor, offset), { weekStartsOn: 0 })
-  return Array.from({ length: 5 }, (_, wi) =>
-    Array.from({ length: 7 }, (_, di) => addDays(base, wi * 7 + di))
-  )
+function darkenForReadability(hex: string): string {
+  if (!hex || hex.length < 7) return hex
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+  if (luminance <= 0.45) return hex
+  const dr = Math.round(r * 0.5)
+  const dg = Math.round(g * 0.5)
+  const db = Math.round(b * 0.5)
+  return `#${dr.toString(16).padStart(2, '0')}${dg.toString(16).padStart(2, '0')}${db.toString(16).padStart(2, '0')}`
 }
-
-function navLabelFor(midDay: Date, mode: CalendarMode): string {
-  if (mode === 'week') {
-    const ws = startOfWeek(midDay, { weekStartsOn: 0 })
-    const we = addDays(ws, 6)
-    if (format(ws, 'MMM') === format(we, 'MMM')) {
-      return `${format(ws, 'MMM d')}–${format(we, 'd, yyyy')}`
-    }
-    return `${format(ws, 'MMM d')} – ${format(we, 'MMM d, yyyy')}`
-  }
-  if (mode === '3week') {
-    const ws = startOfWeek(midDay, { weekStartsOn: 0 })
-    const we = addDays(addWeeks(ws, 2), 6)
-    return `${format(ws, 'MMM d')} – ${format(we, 'MMM d')}`
-  }
-  return format(midDay, 'MMMM yyyy')
-}
-
-// ── Pills ─────────────────────────────────────────────────────────────────
 
 function EventPill({ ev }: { ev: CalendarEvent }) {
   const color = ev.color ?? '#5B7FB5'
-  // Ensure text is always readable by darkening light colors.
-  // We parse the hex lightness and blend toward a dark brown if too light.
   const textColor = darkenForReadability(color)
   return (
     <div
@@ -313,46 +282,19 @@ function EventPill({ ev }: { ev: CalendarEvent }) {
       style={{ backgroundColor: `${color}18` }}
       title={ev.title}
     >
-      {/* Left color bar — always full calendar color */}
       <div className="w-[3px] flex-shrink-0 rounded-l" style={{ backgroundColor: color }} />
-
       <div className="flex items-baseline gap-1 px-1 py-px min-w-0 flex-1">
-        <span
-          className="truncate text-[13px] font-semibold leading-snug"
-          style={{ color: textColor }}
-        >
+        <span className="truncate text-[13px] font-semibold leading-snug" style={{ color: textColor }}>
           {ev.title}
         </span>
         {!ev.all_day && (
-          <span
-            className="flex-shrink-0 text-[10px] tabular-nums leading-snug opacity-60"
-            style={{ color: textColor }}
-          >
+          <span className="flex-shrink-0 text-[10px] tabular-nums leading-snug opacity-60" style={{ color: textColor }}>
             {format(parseISO(ev.start_at), 'h:mma').replace(':00', '')}
           </span>
         )}
       </div>
     </div>
   )
-}
-
-/**
- * Takes a hex color and returns a darkened version if the original is
- * too light to read as text on a near-white background.
- * Threshold: if perceived luminance > 0.45, darken by 50%.
- */
-function darkenForReadability(hex: string): string {
-  const r = parseInt(hex.slice(1, 3), 16)
-  const g = parseInt(hex.slice(3, 5), 16)
-  const b = parseInt(hex.slice(5, 7), 16)
-  // Perceived luminance (ITU-R BT.709)
-  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
-  if (luminance <= 0.45) return hex // dark enough already
-  // Darken by 50%
-  const dr = Math.round(r * 0.5)
-  const dg = Math.round(g * 0.5)
-  const db = Math.round(b * 0.5)
-  return `#${dr.toString(16).padStart(2, '0')}${dg.toString(16).padStart(2, '0')}${db.toString(16).padStart(2, '0')}`
 }
 
 function TaskPill({ task }: { task: Task }) {

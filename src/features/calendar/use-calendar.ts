@@ -42,9 +42,9 @@ export function useCalendarEvents() {
       // Fetch events ±5 weeks from today
       const now = new Date()
       const from = new Date(now)
-      from.setDate(now.getDate() - 7)
+      from.setDate(now.getDate() - 28)  // 4 weeks back
       const to = new Date(now)
-      to.setDate(now.getDate() + 35)
+      to.setDate(now.getDate() + 84)    // 12 weeks forward
 
       const { data, error } = await supabase
         .from('calendar_events')
