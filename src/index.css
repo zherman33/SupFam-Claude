@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Caveat:wght@400;600&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@400;500;600&display=swap");
 @import "tailwindcss";
 
 @theme {
@@ -11,8 +12,10 @@
   --color-terracotta-500: #C4714F;
   --color-terracotta-600: #A85D3F;
 
+  --color-sand-100: #F2EBE0;
   --color-sand-200: #E8DFD0;
   --color-sand-300: #D9CDB8;
+  --color-sand-400: #C8BAA5;
 
   --color-sage-300: #B5C4A8;
   --color-sage-400: #9AB08A;
@@ -37,11 +40,21 @@
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
 }
 
 /* Base styles */
-body {
+* {
+  box-sizing: border-box;
+}
+
+html, body {
   margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
   font-family: var(--font-body);
   color: var(--color-brown-800);
   background-color: var(--color-cream-100);
@@ -50,5 +63,5 @@ body {
 }
 
 #root {
-  min-height: 100svh;
+  height: 100%;
 }
