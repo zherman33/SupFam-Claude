@@ -22,27 +22,43 @@ const PRESET_COLORS = [
 
 export function AdvancedSettings({ onClose }: { onClose: () => void }) {
   return (
-    <div className="absolute right-0 top-full z-50 mt-1.5 w-96 rounded-xl border border-sand-200 bg-white shadow-xl overflow-hidden">
-      <div className="flex items-center justify-between border-b border-sand-100 px-4 py-3 bg-cream-50">
-        <h3 className="text-sm font-semibold text-brown-800">Advanced Settings</h3>
-        <button
-          onClick={onClose}
-          className="rounded-lg p-1.5 text-brown-700/40 hover:bg-sand-100 hover:text-brown-700 transition-colors"
-        >
-          <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
-            <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-          </svg>
-        </button>
-      </div>
+    // Full-screen overlay
+    <div className="fixed inset-0 z-50 flex items-stretch justify-end">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-brown-900/20 backdrop-blur-sm"
+        onClick={onClose}
+      />
 
-      <div className="max-h-[70vh] overflow-y-auto">
-        <EventColorRulesSection />
+      {/* Panel — slides in from the right */}
+      <div className="relative z-10 flex flex-col bg-white w-full max-w-lg shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-sand-100 px-6 py-4 bg-cream-50 flex-shrink-0">
+          <div>
+            <h2 className="font-semibold text-brown-800 text-base">Advanced Settings</h2>
+            <p className="text-xs text-brown-700/50 mt-0.5">Customize how your family calendar looks</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-xl p-2 text-brown-700/40 hover:bg-sand-100 hover:text-brown-700 transition-colors"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 20 20" fill="none">
+              <path d="M4 4l12 12M16 4L4 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto">
+          <EventColorRulesSection />
+        </div>
       </div>
     </div>
   )
 }
 
 function EventColorRulesSection() {
+  // This section renders inside the full-screen panel — generous padding
   const { data: rules, isLoading } = useEventColorRules()
   const create = useCreateEventColorRule()
   const remove = useDeleteEventColorRule()
@@ -71,9 +87,9 @@ function EventColorRulesSection() {
   }
 
   return (
-    <div className="p-4">
+    <div className="p-6">
       {/* Section header */}
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <p className="text-sm font-semibold text-brown-800">Event color overrides</p>
           <p className="text-xs text-brown-700/50 mt-0.5">

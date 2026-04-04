@@ -178,7 +178,7 @@ export function Dashboard() {
               {/* Advanced Settings */}
               <div className="relative">
                 <button
-                  onClick={() => setAdvancedOpen(v => !v)}
+                  onClick={() => { setAdvancedOpen(true); setMenuOpen(false) }}
                   className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-brown-700 hover:bg-cream-50 transition-colors"
                 >
                   <svg className="h-4 w-4 opacity-50" viewBox="0 0 16 16" fill="none">
@@ -190,9 +190,6 @@ export function Dashboard() {
                     <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 </button>
-                {advancedOpen && (
-                  <AdvancedSettings onClose={() => setAdvancedOpen(false)} />
-                )}
               </div>
 
               <div className="h-px bg-sand-100" />
@@ -216,6 +213,10 @@ export function Dashboard() {
 
   return (
     <div className="flex h-svh flex-col bg-cream-100 overflow-hidden">
+      {/* Advanced Settings full-screen panel */}
+      {advancedOpen && (
+        <AdvancedSettings onClose={() => setAdvancedOpen(false)} />
+      )}
 
       {/* ── Main: calendar + optional side drawer ── */}
       <div className="flex flex-1 min-h-0 gap-3 p-3 pb-0">
