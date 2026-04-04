@@ -6,6 +6,7 @@ import {
   isToday,
   isSameMonth,
   parseISO,
+  startOfMonth,
 } from 'date-fns'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import type { Task } from '@/features/tasks/use-tasks'
@@ -22,13 +23,10 @@ interface CalendarViewProps {
   headerRight?: React.ReactNode
 }
 
-// How many weeks to render in the scroll window
+// Render 26 weeks: 4 back + 22 forward (~5 months forward)
 const WEEKS_BEFORE = 4
-const WEEKS_AFTER = 16
-const TOTAL_WEEKS = WEEKS_BEFORE + WEEKS_AFTER  // 20
-
-// Rows per "page" by mode
-const ROWS: Record<CalendarMode, number> = { week: 1, '3week': 3, month: 5 }
+const WEEKS_AFTER = 22
+const TOTAL_WEEKS = WEEKS_BEFORE + WEEKS_AFTER
 
 export function CalendarView({
   tasks = [],
@@ -40,43 +38,92 @@ export function CalendarView({
 }: CalendarViewProps) {
   const today = new Date()
   const anchor = anchorDate ?? today
-  const rowsPerPage = ROWS[mode]
 
-  // Build ALL weeks once — 20 weeks starting WEEKS_BEFORE ago
+  // Rows visible at once per mode
+  const rowsPerPage = mode === 'week' ? 1 : mode === '3week' ? 3 : 5
+
+  // Build ALL weeks — start far enough back that month boundaries are clean
   const baseWeekStart = startOfWeek(addWeeks(anchor, -WEEKS_BEFORE), { weekStartsOn: 0 })
   const allWeeks: Date[][] = Array.from({ length: TOTAL_WEEKS }, (_, wi) =>
     Array.from({ length: 7 }, (_, di) => addDays(baseWeekStart, wi * 7 + di))
   )
 
-  // Scroll container ref
+  // ── Snap row indices ────────────────────────────────────────────────────
+  // Month mode: snap to the week that contains the 1st of each month
+  // (i.e. the first week row where Sunday <= 1st <= Saturday)
+  // Week/3week: snap every rowsPerPage rows
+  const snapRows = new Set<number>()
+  if (mode === 'month') {
+    for (let wi = 0; wi < TOTAL_WEEKS; wi++) {
+      const week = allWeeks[wi]
+      // This week contains the 1st of its month if any day has date === 1
+      // AND that day is a Sunday (start of week) or the week's Sunday is in the same month
+      // Simpler: snap if the 1st of the month that week[3] (Thursday) belongs to
+      // falls within this week
+      const monthStart = startOfMonth(week[3])
+      const weekSun = week[0]
+      const weekSat = week[6]
+      if (monthStart >= weekSun && monthStart <= weekSat) {
+        snapRows.add(wi)
+      }
+    }
+    // Always snap row 0
+    snapRows.add(0)
+  } else {
+    for (let wi = 0; wi < TOTAL_WEEKS; wi += rowsPerPage) {
+      snapRows.add(wi)
+    }
+  }
+
+  // Convert snap rows to sorted array for scroll math
+  const snapRowsArr = Array.from(snapRows).sort((a, b) => a - b)
+
+  // ── Scroll state ────────────────────────────────────────────────────────
   const scrollRef = useRef<HTMLDivElement>(null)
-  // Track which week row is at the top (for month label)
   const [topWeekIdx, setTopWeekIdx] = useState(WEEKS_BEFORE)
 
-  // Scroll to today on mount
+  // Scroll to the snap row closest to today on mount / mode change
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
-    // Each "page" = rowsPerPage rows. Find the page that contains today.
-    const todayPageIdx = Math.floor(WEEKS_BEFORE / rowsPerPage)
-    // Each page is 100% of the container height
-    el.scrollTop = todayPageIdx * el.clientHeight
-  }, [mode]) // re-anchor when mode changes
+    const rowH = el.scrollHeight / TOTAL_WEEKS
+    // Find the snap row that contains or precedes WEEKS_BEFORE
+    let targetRow = 0
+    for (const r of snapRowsArr) {
+      if (r <= WEEKS_BEFORE) targetRow = r
+      else break
+    }
+    el.scrollTop = targetRow * rowH
+    setTopWeekIdx(targetRow)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode])
 
-  // Update month label as user scrolls
   const handleScroll = useCallback(() => {
     const el = scrollRef.current
     if (!el) return
-    const rowH = el.clientHeight / rowsPerPage
+    const rowH = el.scrollHeight / TOTAL_WEEKS
     const topRow = Math.round(el.scrollTop / rowH)
     setTopWeekIdx(topRow)
-  }, [rowsPerPage])
+  }, [])
 
-  // Month label: use the middle day of the middle visible row
-  const midVisibleRow = topWeekIdx + Math.floor(rowsPerPage / 2)
-  const safeRow = Math.min(Math.max(midVisibleRow, 0), TOTAL_WEEKS - 1)
-  const labelDay = allWeeks[safeRow]?.[3] ?? today
-  const monthLabel = format(labelDay, 'MMMM yyyy')
+  // Month label from middle of visible rows
+  const midRow = Math.min(topWeekIdx + Math.floor(rowsPerPage / 2), TOTAL_WEEKS - 1)
+  const labelDay = allWeeks[midRow]?.[3] ?? today
+  const monthLabel = mode === 'week'
+    ? (() => {
+        const ws = allWeeks[topWeekIdx]?.[0] ?? today
+        const we = allWeeks[topWeekIdx]?.[6] ?? today
+        return format(ws, 'MMM') === format(we, 'MMM')
+          ? `${format(ws, 'MMM d')}\u2013${format(we, 'd, yyyy')}`
+          : `${format(ws, 'MMM d')} \u2013 ${format(we, 'MMM d')}`
+      })()
+    : mode === '3week'
+    ? (() => {
+        const ws = allWeeks[topWeekIdx]?.[0] ?? today
+        const we = allWeeks[Math.min(topWeekIdx + 2, TOTAL_WEEKS - 1)]?.[6] ?? today
+        return `${format(ws, 'MMM d')} \u2013 ${format(we, 'MMM d')}`
+      })()
+    : format(labelDay, 'MMMM yyyy')
 
   // ── Index tasks ──────────────────────────────────────────────────────────
   const tasksByDate = new Map<string, Task[]>()
@@ -193,8 +240,7 @@ export function CalendarView({
           }}
         >
           {allWeeks.map((week, wi) => {
-            // Snap point at the start of each page
-            const isSnapPoint = wi % rowsPerPage === 0
+            const isSnapPoint = snapRows.has(wi)
             return (
               <div
                 key={wi}
@@ -206,7 +252,9 @@ export function CalendarView({
                   const dayEvents = eventsByDate.get(key) ?? []
                   const dayTasks = tasksByDate.get(key) ?? []
                   const isCurrentDay = isToday(day)
-                  const isOutsideMonth = mode === 'month' && !isSameMonth(day, labelDay)
+                  // For month view, dim days that aren't in the month starting at the current snap
+                  const snapMonthDay = allWeeks[topWeekIdx]?.[3] ?? today
+                  const isOutsideMonth = mode === 'month' && !isSameMonth(day, snapMonthDay)
                   const isWeekend = day.getDay() === 0 || day.getDay() === 6
 
                   type Pill = { type: 'event'; ev: CalendarEvent } | { type: 'task'; task: Task }
