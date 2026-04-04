@@ -126,7 +126,7 @@ export function CalendarView({
       {/* ── Header ── */}
       <div className="relative flex-shrink-0 flex items-center h-9 mb-2">
         {/* Month label — absolutely centered on the full width */}
-        <h2 className="absolute inset-x-0 text-center font-handwritten text-2xl text-brown-800 pointer-events-none">
+        <h2 className="absolute inset-x-0 text-center font-body text-base font-semibold text-brown-800 tracking-tight pointer-events-none">
           {monthLabel}
         </h2>
 
