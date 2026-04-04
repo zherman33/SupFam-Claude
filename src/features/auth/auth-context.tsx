@@ -51,6 +51,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       options: {
         scopes: 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/tasks',
         redirectTo: window.location.origin,
+        queryParams: {
+          // Force Google to show the consent screen so new scopes are always granted
+          access_type: 'offline',
+          prompt: 'consent',
+        },
       },
     })
   }
