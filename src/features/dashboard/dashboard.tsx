@@ -8,7 +8,7 @@ import { CalendarPicker } from '@/features/calendar/calendar-picker'
 import { TaskBar } from '@/features/tasks/task-bar'
 import { GroceryPanel } from '@/features/grocery/grocery-panel'
 import { NotesPanel } from '@/features/notes/notes-panel'
-import { useTasks } from '@/features/tasks/use-tasks'
+import { useTasks, useSyncTasks } from '@/features/tasks/use-tasks'
 import { useCalendarEvents, useSyncCalendars } from '@/features/calendar/use-calendar'
 
 type Drawer = 'grocery' | 'notes' | null
@@ -19,6 +19,7 @@ export function Dashboard() {
   const { data: tasks } = useTasks()
   const { data: events } = useCalendarEvents()
   const syncCalendars = useSyncCalendars()
+  const syncTasks = useSyncTasks()
 
   const [mode, setMode] = useState<CalendarMode>('month')
   const [drawer, setDrawer] = useState<Drawer>(null)
@@ -35,10 +36,12 @@ export function Dashboard() {
   useEffect(() => {
     if (!member?.id) return
     syncCalendars.mutate()
+    syncTasks.mutate()
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
         syncCalendars.mutate()
+        syncTasks.mutate()
         queryClient.invalidateQueries()
       }
     }
