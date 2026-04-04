@@ -12,8 +12,11 @@ export default defineConfig({
       // "prompt" mode: service worker installs silently and auto-activates
       // on next navigation — no stale app shell ever shown
       registerType: 'autoUpdate',
-      // Don't cache API calls or Supabase — only the app shell
+      devOptions: { enabled: false },
       workbox: {
+        // Activate new service worker immediately without waiting
+        skipWaiting: true,
+        clientsClaim: true,
         // Only precache the built assets
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         // Never cache Supabase or Google API calls
