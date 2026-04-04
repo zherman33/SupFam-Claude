@@ -7,7 +7,7 @@ import {
   isSameMonth,
   parseISO,
 } from 'date-fns'
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import type { Task } from '@/features/tasks/use-tasks'
 import type { CalendarEvent } from './use-calendar'
 
@@ -46,9 +46,40 @@ export function CalendarView({
   const midWeek = weeks[Math.floor(weeks.length / 2)]
   const midDay = midWeek[3]
 
-  // Nav labels + step size
   const navLabel = navLabelFor(midDay, mode)
-  const stepLabel = mode === 'week' ? 'week' : mode === '3week' ? '3 weeks' : 'month'
+
+  // ── Scroll / swipe navigation ────────────────────────────────────────────
+  // One wheel tick or one swipe = move 1 week forward/back regardless of mode
+  const wheelAccum = useRef(0)
+  const wheelTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const touchStartY = useRef<number | null>(null)
+
+  const nudge = useCallback((dir: 1 | -1) => {
+    setOffset(o => o + dir)
+  }, [])
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault()
+    wheelAccum.current += e.deltaY
+    if (wheelTimer.current) clearTimeout(wheelTimer.current)
+    wheelTimer.current = setTimeout(() => {
+      if (Math.abs(wheelAccum.current) > 30) {
+        nudge(wheelAccum.current > 0 ? 1 : -1)
+      }
+      wheelAccum.current = 0
+    }, 80)
+  }, [nudge])
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY
+  }, [])
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchStartY.current === null) return
+    const dy = touchStartY.current - e.changedTouches[0].clientY
+    if (Math.abs(dy) > 40) nudge(dy > 0 ? 1 : -1)
+    touchStartY.current = null
+  }, [nudge])
 
   // Index tasks by due date
   const tasksByDate = new Map<string, Task[]>()
@@ -80,41 +111,16 @@ export function CalendarView({
     <div className="flex h-full flex-col select-none">
 
       {/* ── Calendar header row ──────────────────────────── */}
-      <div className="flex-shrink-0 flex items-center gap-2 mb-3">
+      <div className="flex-shrink-0 flex items-center mb-3">
 
-        {/* Prev */}
-        <button
-          onClick={() => setOffset(o => o - 1)}
-          aria-label={`Previous ${stepLabel}`}
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-brown-700/40 hover:bg-sand-100 hover:text-brown-700 transition-colors"
-        >
-          <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
-            <path d="M10 4L6 8l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
-
-        {/* Month/range label — centered */}
-        <div className="flex-1 flex items-center justify-center gap-3">
-          <h2 className="font-display text-lg font-semibold text-brown-800 tracking-tight">
-            {navLabel}
-          </h2>
-
-        </div>
-
-        {/* Next */}
-        <button
-          onClick={() => setOffset(o => o + 1)}
-          aria-label={`Next ${stepLabel}`}
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-brown-700/40 hover:bg-sand-100 hover:text-brown-700 transition-colors"
-        >
-          <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
-            <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
+        {/* Month/year — fully centered */}
+        <h2 className="flex-1 text-center font-display text-lg font-semibold text-brown-800 tracking-tight">
+          {navLabel}
+        </h2>
 
         {/* View switcher */}
         {onModeChange && (
-          <div className="flex items-center gap-px rounded-lg bg-sand-100 p-0.5 ml-1">
+          <div className="flex items-center gap-px rounded-lg bg-sand-100 p-0.5">
             {(['week', '3week', 'month'] as CalendarMode[]).map(m => (
               <button
                 key={m}
@@ -150,7 +156,13 @@ export function CalendarView({
       </div>
 
       {/* ── Calendar grid ────────────────────────────────── */}
-      <div className={`flex-1 min-h-0 grid`} style={{ gridTemplateRows: `repeat(${numRows}, 1fr)` }}>
+      <div
+        className="flex-1 min-h-0 grid"
+        style={{ gridTemplateRows: `repeat(${numRows}, 1fr)` }}
+        onWheel={handleWheel}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         {weeks.map((week, wi) => (
           <div
             key={wi}
