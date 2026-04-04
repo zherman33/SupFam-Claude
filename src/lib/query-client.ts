@@ -4,7 +4,9 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 2, // 2 minutes
-      retry: 1,
+      // No global retries — individual queries opt in if needed.
+      // Retrying on auth/RLS errors just causes loading hangs.
+      retry: false,
     },
   },
 })
