@@ -47,12 +47,19 @@ export function TaskBar() {
             placeholder="What needs doing?"
             className="flex-1 rounded-lg border border-sand-300 bg-cream-50 px-3 py-1.5 text-sm text-brown-800 placeholder:text-brown-700/40 focus:border-terracotta-500 focus:outline-none focus:ring-1 focus:ring-terracotta-500"
           />
-          <input
-            type="date"
-            value={newDue}
-            onChange={(e) => setNewDue(e.target.value)}
-            className="rounded-lg border border-sand-300 bg-cream-50 px-3 py-1.5 text-sm text-brown-800 focus:border-terracotta-500 focus:outline-none focus:ring-1 focus:ring-terracotta-500"
-          />
+          <div className="relative">
+            <input
+              type="date"
+              value={newDue}
+              onChange={(e) => setNewDue(e.target.value)}
+              className="rounded-lg border border-sand-300 bg-cream-50 px-3 py-1.5 text-sm text-brown-800 focus:border-terracotta-500 focus:outline-none focus:ring-1 focus:ring-terracotta-500 [color-scheme:light]"
+            />
+            {!newDue && (
+              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-brown-700/35">
+                Date
+              </span>
+            )}
+          </div>
           <select
             value={newAssignee}
             onChange={(e) => setNewAssignee(e.target.value)}
