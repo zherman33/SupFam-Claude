@@ -12,6 +12,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import type { Task } from '@/features/tasks/use-tasks'
 import type { CalendarEvent } from './use-calendar'
 import { useEventColorRules, applyColorRules } from '@/features/settings/use-event-color-rules'
+import { EventForm } from './event-form'
 
 export type CalendarMode = 'month' | '3week' | 'week'
 
@@ -40,6 +41,10 @@ export function CalendarView({
   const today = new Date()
   const anchor = anchorDate ?? today
   const { data: colorRules } = useEventColorRules()
+
+  // Event form state
+  const [formDate, setFormDate] = useState<Date | null>(null)
+  const [editEvent, setEditEvent] = useState<CalendarEvent | null>(null)
 
   // Rows visible at once per mode
   const rowsPerPage = mode === 'week' ? 1 : mode === '3week' ? 3 : 5
@@ -171,6 +176,14 @@ export function CalendarView({
   const DAY_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
   return (
+    <>
+    {(formDate || editEvent) && (
+      <EventForm
+        initialDate={formDate ?? undefined}
+        event={editEvent ?? undefined}
+        onClose={() => { setFormDate(null); setEditEvent(null) }}
+      />
+    )}
     <div className="flex h-full flex-col select-none overflow-hidden">
 
       {/* ── Header ── */}
@@ -269,11 +282,12 @@ export function CalendarView({
                   return (
                     <div
                       key={key}
-                      className={`relative flex flex-col border-r border-sand-100 last:border-r-0 overflow-hidden min-h-0
+                      className={`relative flex flex-col border-r border-sand-100 last:border-r-0 overflow-hidden min-h-0 cursor-pointer
                         ${isOutsideMonth ? 'opacity-25' : ''}
                         ${isWeekend && !isCurrentDay ? 'bg-[#faf8f5]' : 'bg-white'}
                         ${isCurrentDay ? 'bg-terracotta-500/[0.04]' : ''}
                       `}
+                      onClick={() => setFormDate(day)}
                     >
                       {isCurrentDay && (
                         <div className="absolute top-0 inset-x-0 h-[2px] bg-terracotta-500 rounded-b" />
@@ -292,7 +306,12 @@ export function CalendarView({
                         </div>
                         <div className="flex flex-col gap-px flex-1 min-h-0 overflow-hidden">
                           {pills.map((pill) => pill.type === 'event'
-                            ? <EventPill key={`${pill.ev.id}-${key}`} ev={pill.ev} colorRules={colorRules} />
+                            ? <EventPill
+                                key={`${pill.ev.id}-${key}`}
+                                ev={pill.ev}
+                                colorRules={colorRules}
+                                onClick={e => { e.stopPropagation(); setEditEvent(pill.ev) }}
+                              />
                             : <TaskPill key={pill.task.id} task={pill.task} />
                           )}
                         </div>
@@ -306,6 +325,7 @@ export function CalendarView({
         </div>
       </div>
     </div>
+    </>
   )
 }
 
@@ -324,16 +344,17 @@ function darkenForReadability(hex: string): string {
   return `#${dr.toString(16).padStart(2, '0')}${dg.toString(16).padStart(2, '0')}${db.toString(16).padStart(2, '0')}`
 }
 
-function EventPill({ ev, colorRules }: { ev: CalendarEvent; colorRules?: import('@/features/settings/use-event-color-rules').EventColorRule[] }) {
+function EventPill({ ev, colorRules, onClick }: { ev: CalendarEvent; colorRules?: import('@/features/settings/use-event-color-rules').EventColorRule[]; onClick?: (e: React.MouseEvent) => void }) {
   // Color rule overrides take priority over the calendar's default color
   const ruleColor = applyColorRules(ev.title, colorRules)
   const color = ruleColor ?? ev.color ?? '#5B7FB5'
   const textColor = darkenForReadability(color)
   return (
     <div
-      className="flex items-stretch rounded overflow-hidden flex-shrink-0"
+      className="flex items-stretch rounded overflow-hidden flex-shrink-0 cursor-pointer hover:brightness-95 active:brightness-90 transition-[filter]"
       style={{ backgroundColor: `${color}18` }}
       title={ev.title}
+      onClick={onClick}
     >
       <div className="w-[3px] flex-shrink-0 rounded-l" style={{ backgroundColor: color }} />
       <div className="flex items-baseline gap-1 px-1 py-px min-w-0 flex-1">

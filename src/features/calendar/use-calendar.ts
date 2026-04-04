@@ -25,6 +25,7 @@ export interface ConnectedCalendar {
   calendar_name: string | null
   color: string | null
   is_visible: boolean
+  is_default: boolean
   last_synced_at: string | null
   // joined
   owner?: { display_name: string; avatar_color: string | null }
@@ -86,7 +87,7 @@ export function useConnectedCalendars() {
         .order('calendar_name', { ascending: true })
 
       if (error) throw error
-      return data as ConnectedCalendar[]
+      return data as unknown as ConnectedCalendar[]
     },
   })
 }
