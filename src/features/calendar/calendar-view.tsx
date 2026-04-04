@@ -23,8 +23,6 @@ interface CalendarViewProps {
   headerRight?: React.ReactNode
 }
 
-const MAX_VISIBLE_MONTH = 2  // taller pills need fewer rows per cell
-const MAX_VISIBLE_WEEK = 6  // more room in single-week view
 
 export function CalendarView({
   tasks = [],
@@ -40,7 +38,6 @@ export function CalendarView({
 
   // Build the grid of weeks based on mode
   const weeks = buildWeeks(anchor, offset, mode)
-  const maxVisible = mode === 'week' ? MAX_VISIBLE_WEEK : MAX_VISIBLE_MONTH
 
   // The "representative" date for the month label — middle of the grid
   const midWeek = weeks[Math.floor(weeks.length / 2)]
@@ -89,13 +86,44 @@ export function CalendarView({
     tasksByDate.get(task.due_date)!.push(task)
   }
 
-  // Index events by date, sorted all-day first then by time
+  // Index events by date.
+  // All-day events stored as UTC midnight — parse as local date string (YYYY-MM-DD)
+  // to avoid the UTC→local shift that would move them to the previous day.
+  // Multi-day events are expanded across every day they span.
   const eventsByDate = new Map<string, CalendarEvent[]>()
-  for (const ev of events) {
-    const key = format(parseISO(ev.start_at), 'yyyy-MM-dd')
+
+  const addToDate = (key: string, ev: CalendarEvent) => {
     if (!eventsByDate.has(key)) eventsByDate.set(key, [])
-    eventsByDate.get(key)!.push(ev)
+    // Avoid duplicating multi-day events on a day (shouldn't happen but guard)
+    if (!eventsByDate.get(key)!.find(e => e.id === ev.id)) {
+      eventsByDate.get(key)!.push(ev)
+    }
   }
+
+  for (const ev of events) {
+    if (ev.all_day) {
+      // For all-day events, use the date portion of the UTC string directly
+      // (avoids timezone shift: '2026-04-17T00:00:00+00' → '2026-04-17')
+      const startKey = ev.start_at.slice(0, 10)
+      const endKey = ev.end_at ? ev.end_at.slice(0, 10) : startKey
+      // Expand across every day [start, end) — Google all-day end is exclusive
+      let cur = startKey
+      while (cur < endKey) {
+        addToDate(cur, ev)
+        // Advance by 1 day
+        const d = new Date(cur + 'T00:00:00')
+        d.setDate(d.getDate() + 1)
+        cur = format(d, 'yyyy-MM-dd')
+      }
+      // If end === start (shouldn't happen but safety)
+      if (startKey === endKey) addToDate(startKey, ev)
+    } else {
+      // Timed events: convert from UTC to local date
+      const key = format(parseISO(ev.start_at), 'yyyy-MM-dd')
+      addToDate(key, ev)
+    }
+  }
+
   for (const [, evs] of eventsByDate) {
     evs.sort((a, b) => {
       if (a.all_day && !b.all_day) return -1
@@ -113,8 +141,8 @@ export function CalendarView({
       {/* ── Calendar header row ──────────────────────────── */}
       <div className="flex-shrink-0 flex items-center mb-3">
 
-        {/* Month/year — fully centered */}
-        <h2 className="flex-1 text-center font-display text-lg font-semibold text-brown-800 tracking-tight">
+        {/* Month/year — fully centered, handwritten font to match event names */}
+        <h2 className="flex-1 text-center font-handwritten text-2xl text-brown-800">
           {navLabel}
         </h2>
 
@@ -181,8 +209,6 @@ export function CalendarView({
                 ...dayEvents.map(ev => ({ type: 'event' as const, ev })),
                 ...dayTasks.map(task => ({ type: 'task' as const, task })),
               ]
-              const visible = pills.slice(0, maxVisible)
-              const overflow = pills.length - maxVisible
 
               return (
                 <div
@@ -213,16 +239,11 @@ export function CalendarView({
                       </span>
                     </div>
 
-                    {/* Pills */}
+                    {/* Pills — CSS clips at the bottom, no hard count limit */}
                     <div className="flex flex-col gap-px flex-1 min-h-0 overflow-hidden">
-                      {visible.map((pill) => pill.type === 'event'
-                        ? <EventPill key={pill.ev.id} ev={pill.ev} />
+                      {pills.map((pill) => pill.type === 'event'
+                        ? <EventPill key={`${pill.ev.id}-${format(day, 'yyyy-MM-dd')}`} ev={pill.ev} />
                         : <TaskPill key={pill.task.id} task={pill.task} />
-                      )}
-                      {overflow > 0 && (
-                        <span className="text-[10px] font-semibold text-brown-700/35 pl-1 flex-shrink-0">
-                          +{overflow}
-                        </span>
                       )}
                     </div>
                   </div>
