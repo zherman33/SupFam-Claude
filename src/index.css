@@ -1,6 +1,16 @@
 @import url("https://fonts.googleapis.com/css2?family=Caveat:wght@400;600&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@400;500;600&display=swap");
 @import "tailwindcss";
 
+/* Safe area utilities for iPhone notch + home indicator */
+.pt-safe { padding-top: env(safe-area-inset-top); }
+.pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 16px); }
+.pl-safe { padding-left: env(safe-area-inset-left); }
+.pr-safe { padding-right: env(safe-area-inset-right); }
+
+/* Hide scrollbars */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
 @theme {
   /* Colors — warm cream palette, never pure white/black */
   --color-cream-50: #FEFCF9;
