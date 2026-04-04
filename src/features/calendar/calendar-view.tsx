@@ -70,7 +70,8 @@ export function CalendarView({
     // Always snap row 0
     snapRows.add(0)
   } else {
-    for (let wi = 0; wi < TOTAL_WEEKS; wi += rowsPerPage) {
+    // week mode: snap every 1 row. 3week mode: snap every 1 row (scroll week by week)
+    for (let wi = 0; wi < TOTAL_WEEKS; wi++) {
       snapRows.add(wi)
     }
   }
