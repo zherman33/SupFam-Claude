@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { queryClient } from '@/lib/query-client'
 import { useAuth } from '@/features/auth/auth-context'
 import { useFamilyMember } from '@/features/auth/use-family-member'
 import { CalendarView, type CalendarMode } from '@/features/calendar/calendar-view'
@@ -27,9 +28,20 @@ export function Dashboard() {
   const familyName = member?.families?.name ?? 'Your Family'
   const inviteCode = member?.families?.invite_code
 
-  // Auto-sync on mount
+  // Auto-sync on mount and whenever the app comes back into view
+  // (covers PWA waking from background on iPad/iPhone)
   useEffect(() => {
-    if (member?.id) syncCalendars.mutate()
+    if (!member?.id) return
+    syncCalendars.mutate()
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        syncCalendars.mutate()
+        queryClient.invalidateQueries()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [member?.id])
 
