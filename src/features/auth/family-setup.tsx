@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { useAuth } from './auth-context'
+import { useAuth, flushPendingToken } from './auth-context'
 import { supabase } from '@/lib/supabase'
 
 interface FamilySetupProps {
@@ -79,6 +79,8 @@ export function FamilySetup({ onComplete }: FamilySetupProps) {
       setLoading(false)
       return
     }
+    // Flush any cached OAuth token now that the member row exists
+    if (user) await flushPendingToken(user.id)
     onComplete()
   }
 
@@ -110,6 +112,8 @@ export function FamilySetup({ onComplete }: FamilySetupProps) {
       setLoading(false)
       return
     }
+    // Flush any cached OAuth token now that the member row exists
+    if (user) await flushPendingToken(user.id)
     onComplete()
   }
 

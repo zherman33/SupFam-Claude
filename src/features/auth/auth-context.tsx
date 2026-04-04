@@ -83,9 +83,16 @@ export function useAuth() {
 }
 
 /**
- * Store Google OAuth tokens in connected_calendars on first sign-in.
- * provider_token and provider_refresh_token are only available during
- * the SIGNED_IN event — they must be captured immediately.
+ * In-memory token cache: if a user signs in before their family_member
+ * row exists (new user joining a family), we hold the token here and
+ * flush it once the member row is created (called from FamilySetup.onComplete).
+ */
+const pendingTokens = new Map<string, { access: string; refresh: string | null; expiresAt: string | null }>()
+
+/**
+ * Store Google OAuth tokens in google_tokens on sign-in.
+ * provider_token is only available at the SIGNED_IN moment — capture it
+ * immediately, then retry once the family_member row exists.
  */
 async function storeCalendarTokens(session: Session) {
   const userId = session.user.id
@@ -94,27 +101,43 @@ async function storeCalendarTokens(session: Session) {
 
   if (!providerToken) return
 
-  // Look up the user's family_member record
+  // Cache the token regardless — we may need it after family setup
+  pendingTokens.set(userId, {
+    access: providerToken,
+    refresh: providerRefreshToken ?? null,
+    expiresAt: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
+  })
+
+  // Try to write immediately (works for returning users who already have a member row)
+  await flushPendingToken(userId)
+}
+
+/**
+ * Called after family setup completes so we can flush the cached token
+ * now that the family_member row exists.
+ */
+export async function flushPendingToken(userId: string) {
   const { data: member } = await supabase
     .from('family_members')
     .select('id')
     .eq('user_id', userId)
     .maybeSingle()
 
-  if (!member) return
+  if (!member) return // still no row — caller should retry later
 
-  // Store OAuth tokens in google_tokens (one row per family member)
-  // Cast to any — google_tokens isn't in the generated DB types yet
+  const tok = pendingTokens.get(userId)
+  if (!tok) return
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase.from('google_tokens') as any).upsert(
     {
       family_member_id: member.id,
-      access_token: providerToken,
-      refresh_token: providerRefreshToken ?? null,
-      token_expires_at: session.expires_at
-        ? new Date(session.expires_at * 1000).toISOString()
-        : null,
+      access_token: tok.access,
+      refresh_token: tok.refresh,
+      token_expires_at: tok.expiresAt,
     },
     { onConflict: 'family_member_id' }
   )
+
+  pendingTokens.delete(userId)
 }
