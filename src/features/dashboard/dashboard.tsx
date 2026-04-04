@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { queryClient } from '@/lib/query-client'
+import { AdvancedSettings } from '@/features/settings/advanced-settings'
 import { useAuth } from '@/features/auth/auth-context'
 import { useFamilyMember } from '@/features/auth/use-family-member'
 import { CalendarView, type CalendarMode } from '@/features/calendar/calendar-view'
@@ -23,6 +24,7 @@ export function Dashboard() {
   const [drawer, setDrawer] = useState<Drawer>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [calPickerOpen, setCalPickerOpen] = useState(false)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   const familyName = member?.families?.name ?? 'Your Family'
@@ -170,6 +172,28 @@ export function Dashboard() {
                   </div>
                 </div>
               )}
+
+              <div className="h-px bg-sand-100" />
+
+              {/* Advanced Settings */}
+              <div className="relative">
+                <button
+                  onClick={() => setAdvancedOpen(v => !v)}
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-brown-700 hover:bg-cream-50 transition-colors"
+                >
+                  <svg className="h-4 w-4 opacity-50" viewBox="0 0 16 16" fill="none">
+                    <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.5"/>
+                    <path d="M8 2v1M8 13v1M2 8h1M13 8h1M3.5 3.5l.7.7M11.8 11.8l.7.7M3.5 12.5l.7-.7M11.8 4.2l.7-.7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                  Advanced settings
+                  <svg className={`ml-auto h-3.5 w-3.5 text-brown-700/30 transition-transform ${advancedOpen ? 'rotate-180' : ''}`} viewBox="0 0 14 14" fill="none">
+                    <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                {advancedOpen && (
+                  <AdvancedSettings onClose={() => setAdvancedOpen(false)} />
+                )}
+              </div>
 
               <div className="h-px bg-sand-100" />
 

@@ -11,6 +11,7 @@ import {
 import { useState, useRef, useEffect, useCallback } from 'react'
 import type { Task } from '@/features/tasks/use-tasks'
 import type { CalendarEvent } from './use-calendar'
+import { useEventColorRules, applyColorRules } from '@/features/settings/use-event-color-rules'
 
 export type CalendarMode = 'month' | '3week' | 'week'
 
@@ -38,6 +39,7 @@ export function CalendarView({
 }: CalendarViewProps) {
   const today = new Date()
   const anchor = anchorDate ?? today
+  const { data: colorRules } = useEventColorRules()
 
   // Rows visible at once per mode
   const rowsPerPage = mode === 'week' ? 1 : mode === '3week' ? 3 : 5
@@ -290,7 +292,7 @@ export function CalendarView({
                         </div>
                         <div className="flex flex-col gap-px flex-1 min-h-0 overflow-hidden">
                           {pills.map((pill) => pill.type === 'event'
-                            ? <EventPill key={`${pill.ev.id}-${key}`} ev={pill.ev} />
+                            ? <EventPill key={`${pill.ev.id}-${key}`} ev={pill.ev} colorRules={colorRules} />
                             : <TaskPill key={pill.task.id} task={pill.task} />
                           )}
                         </div>
@@ -322,8 +324,10 @@ function darkenForReadability(hex: string): string {
   return `#${dr.toString(16).padStart(2, '0')}${dg.toString(16).padStart(2, '0')}${db.toString(16).padStart(2, '0')}`
 }
 
-function EventPill({ ev }: { ev: CalendarEvent }) {
-  const color = ev.color ?? '#5B7FB5'
+function EventPill({ ev, colorRules }: { ev: CalendarEvent; colorRules?: import('@/features/settings/use-event-color-rules').EventColorRule[] }) {
+  // Color rule overrides take priority over the calendar's default color
+  const ruleColor = applyColorRules(ev.title, colorRules)
+  const color = ruleColor ?? ev.color ?? '#5B7FB5'
   const textColor = darkenForReadability(color)
   return (
     <div
