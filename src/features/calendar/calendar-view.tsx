@@ -2,24 +2,23 @@ import {
   startOfWeek,
   addDays,
   addWeeks,
-  subWeeks,
   format,
   isToday,
   isSameMonth,
-  isSameDay,
   parseISO,
-  startOfDay,
 } from 'date-fns'
 import { useState } from 'react'
 import type { Task } from '@/features/tasks/use-tasks'
+import type { CalendarEvent } from './use-calendar'
 
 interface CalendarViewProps {
   tasks?: Task[]
+  events?: CalendarEvent[]
   anchorDate?: Date
 }
 
 // 5 weeks, starting from the week that contains anchorDate (defaults to today)
-export function CalendarView({ tasks = [], anchorDate }: CalendarViewProps) {
+export function CalendarView({ tasks = [], events = [], anchorDate }: CalendarViewProps) {
   const today = new Date()
   const [offset, setOffset] = useState(0) // week offset from anchor
 
@@ -39,6 +38,14 @@ export function CalendarView({ tasks = [], anchorDate }: CalendarViewProps) {
     const key = task.due_date // 'YYYY-MM-DD'
     if (!tasksByDate.has(key)) tasksByDate.set(key, [])
     tasksByDate.get(key)!.push(task)
+  }
+
+  // Map calendar events to their start date
+  const eventsByDate = new Map<string, CalendarEvent[]>()
+  for (const ev of events) {
+    const key = format(parseISO(ev.start_at), 'yyyy-MM-dd')
+    if (!eventsByDate.has(key)) eventsByDate.set(key, [])
+    eventsByDate.get(key)!.push(ev)
   }
 
   const DAY_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -117,9 +124,29 @@ export function CalendarView({ tasks = [], anchorDate }: CalendarViewProps) {
                     </span>
                   </div>
 
-                  {/* Task pills */}
+                  {/* Event + task pills */}
                   <div className="flex flex-col gap-0.5 overflow-hidden">
-                    {dayTasks.slice(0, 3).map((task) => (
+                    {/* Calendar events first */}
+                    {(eventsByDate.get(key) ?? []).slice(0, 3).map((ev) => (
+                      <div
+                        key={ev.id}
+                        className="truncate rounded px-1 py-0.5 text-xs leading-tight font-medium"
+                        style={{
+                          backgroundColor: ev.color ? `${ev.color}33` : '#5B7FB533',
+                          color: ev.color ?? '#5B7FB5',
+                        }}
+                        title={ev.title}
+                      >
+                        {!ev.all_day && (
+                          <span className="opacity-70 mr-0.5">
+                            {format(parseISO(ev.start_at), 'h:mm')}
+                          </span>
+                        )}
+                        {ev.title}
+                      </div>
+                    ))}
+                    {/* Task pills */}
+                    {dayTasks.slice(0, 2).map((task) => (
                       <div
                         key={task.id}
                         className="truncate rounded px-1 py-0.5 text-xs leading-tight"
@@ -129,14 +156,14 @@ export function CalendarView({ tasks = [], anchorDate }: CalendarViewProps) {
                             : '#C4714F22',
                           color: task.assigned_member?.avatar_color ?? '#C4714F',
                         }}
-                        title={task.title}
+                        title={`☑ ${task.title}`}
                       >
-                        {task.title}
+                        ☑ {task.title}
                       </div>
                     ))}
-                    {dayTasks.length > 3 && (
+                    {((eventsByDate.get(key)?.length ?? 0) + dayTasks.length) > 5 && (
                       <span className="text-xs text-brown-700/40 pl-1">
-                        +{dayTasks.length - 3} more
+                        +{(eventsByDate.get(key)?.length ?? 0) + dayTasks.length - 5} more
                       </span>
                     )}
                   </div>

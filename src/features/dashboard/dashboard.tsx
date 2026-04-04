@@ -1,11 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '@/features/auth/auth-context'
 import { useFamilyMember } from '@/features/auth/use-family-member'
 import { CalendarView } from '@/features/calendar/calendar-view'
+import { CalendarPicker } from '@/features/calendar/calendar-picker'
 import { TaskBar } from '@/features/tasks/task-bar'
 import { GroceryPanel } from '@/features/grocery/grocery-panel'
 import { NotesPanel } from '@/features/notes/notes-panel'
 import { useTasks } from '@/features/tasks/use-tasks'
+import { useCalendarEvents, useSyncCalendars } from '@/features/calendar/use-calendar'
 
 type Drawer = 'grocery' | 'notes' | null
 
@@ -13,11 +15,24 @@ export function Dashboard() {
   const { signOut } = useAuth()
   const { data: member } = useFamilyMember()
   const { data: tasks } = useTasks()
+  const { data: events } = useCalendarEvents()
+  const syncCalendars = useSyncCalendars()
+
   const [showSettings, setShowSettings] = useState(false)
+  const [showCalendarPicker, setShowCalendarPicker] = useState(false)
   const [drawer, setDrawer] = useState<Drawer>(null)
 
   const familyName = member?.families?.name ?? 'Your Family'
   const inviteCode = member?.families?.invite_code
+
+  // Auto-sync calendars on first load (silently)
+  useEffect(() => {
+    if (member?.id) {
+      syncCalendars.mutate()
+    }
+    // Only run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [member?.id])
 
   const toggleDrawer = (panel: 'grocery' | 'notes') => {
     setDrawer((d) => (d === panel ? null : panel))
@@ -27,16 +42,44 @@ export function Dashboard() {
     <div className="flex h-svh flex-col bg-cream-100 overflow-hidden">
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-3 flex-shrink-0">
-        <div className="flex items-center gap-4">
-          <div>
-            <h1 className="font-handwritten text-3xl leading-none text-terracotta-500">
-              Sup Fam
-            </h1>
-            <p className="mt-0.5 font-display text-sm text-brown-700/60">{familyName}</p>
-          </div>
+        <div>
+          <h1 className="font-handwritten text-3xl leading-none text-terracotta-500">
+            Sup Fam
+          </h1>
+          <p className="mt-0.5 font-display text-sm text-brown-700/60">{familyName}</p>
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Calendar picker toggle */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                setShowCalendarPicker(!showCalendarPicker)
+                setShowSettings(false)
+              }}
+              className={`flex items-center gap-2 rounded-xl border px-4 py-1.5 text-sm font-medium transition-colors ${
+                showCalendarPicker
+                  ? 'border-terracotta-400 bg-terracotta-500 text-white'
+                  : 'border-sand-200 bg-white text-brown-700 hover:bg-cream-100'
+              }`}
+            >
+              <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
+                <rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M5 2v2M11 2v2M2 7h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              Calendars
+              {syncCalendars.isPending && (
+                <svg className="h-3 w-3 animate-spin opacity-70" viewBox="0 0 14 14" fill="none">
+                  <path d="M12 7A5 5 0 1 1 7 2M12 2v4H8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+            </button>
+
+            {showCalendarPicker && (
+              <CalendarPicker onClose={() => setShowCalendarPicker(false)} />
+            )}
+          </div>
+
           {/* Grocery + Notes drawer toggles */}
           <button
             onClick={() => toggleDrawer('grocery')}
@@ -62,7 +105,10 @@ export function Dashboard() {
           {/* Profile / settings */}
           <div className="relative">
             <button
-              onClick={() => setShowSettings(!showSettings)}
+              onClick={() => {
+                setShowSettings(!showSettings)
+                setShowCalendarPicker(false)
+              }}
               className="flex items-center gap-2 rounded-xl border border-sand-200 bg-white px-4 py-1.5 shadow-sm transition-colors hover:bg-cream-100"
             >
               <div
@@ -114,19 +160,25 @@ export function Dashboard() {
         </div>
       </header>
 
-      {/* Click outside to close settings */}
-      {showSettings && (
-        <div className="fixed inset-0 z-40" onClick={() => setShowSettings(false)} />
+      {/* Click outside to close dropdowns */}
+      {(showSettings || showCalendarPicker) && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => {
+            setShowSettings(false)
+            setShowCalendarPicker(false)
+          }}
+        />
       )}
 
       {/* Main content area */}
       <div className="flex flex-1 overflow-hidden px-6 pb-0 gap-4">
         {/* Calendar — fills all available space */}
         <div className="flex-1 overflow-hidden rounded-2xl bg-white p-5 shadow-sm">
-          <CalendarView tasks={tasks} />
+          <CalendarView tasks={tasks} events={events} />
         </div>
 
-        {/* Side drawer — slides in when grocery or notes is open */}
+        {/* Side drawer */}
         {drawer && (
           <div className="w-80 flex-shrink-0 overflow-hidden rounded-2xl bg-white p-5 shadow-sm flex flex-col">
             <div className="mb-4 flex items-center justify-between flex-shrink-0">
