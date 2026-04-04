@@ -271,28 +271,29 @@ function navLabelFor(midDay: Date, mode: CalendarMode): string {
 
 function EventPill({ ev }: { ev: CalendarEvent }) {
   const color = ev.color ?? '#5B7FB5'
+  // Ensure text is always readable by darkening light colors.
+  // We parse the hex lightness and blend toward a dark brown if too light.
+  const textColor = darkenForReadability(color)
   return (
     <div
       className="flex items-stretch rounded overflow-hidden flex-shrink-0"
       style={{ backgroundColor: `${color}18` }}
       title={ev.title}
     >
-      {/* Left color bar */}
+      {/* Left color bar — always full calendar color */}
       <div className="w-[3px] flex-shrink-0 rounded-l" style={{ backgroundColor: color }} />
 
       <div className="flex items-baseline gap-1 px-1 py-px min-w-0 flex-1">
-        {/* Event name — primary, large */}
         <span
           className="truncate text-[13px] font-semibold leading-snug"
-          style={{ color }}
+          style={{ color: textColor }}
         >
           {ev.title}
         </span>
-        {/* Time — secondary, after the name */}
         {!ev.all_day && (
           <span
-            className="flex-shrink-0 text-[10px] tabular-nums leading-snug"
-            style={{ color, opacity: 0.55 }}
+            className="flex-shrink-0 text-[10px] tabular-nums leading-snug opacity-60"
+            style={{ color: textColor }}
           >
             {format(parseISO(ev.start_at), 'h:mma').replace(':00', '')}
           </span>
@@ -300,6 +301,25 @@ function EventPill({ ev }: { ev: CalendarEvent }) {
       </div>
     </div>
   )
+}
+
+/**
+ * Takes a hex color and returns a darkened version if the original is
+ * too light to read as text on a near-white background.
+ * Threshold: if perceived luminance > 0.45, darken by 50%.
+ */
+function darkenForReadability(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  // Perceived luminance (ITU-R BT.709)
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+  if (luminance <= 0.45) return hex // dark enough already
+  // Darken by 50%
+  const dr = Math.round(r * 0.5)
+  const dg = Math.round(g * 0.5)
+  const db = Math.round(b * 0.5)
+  return `#${dr.toString(16).padStart(2, '0')}${dg.toString(16).padStart(2, '0')}${db.toString(16).padStart(2, '0')}`
 }
 
 function TaskPill({ task }: { task: Task }) {
