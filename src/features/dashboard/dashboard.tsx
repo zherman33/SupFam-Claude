@@ -6,6 +6,7 @@ import { useFamilyMember } from '@/features/auth/use-family-member'
 import { CalendarView, type CalendarMode } from '@/features/calendar/calendar-view'
 import { CalendarPicker } from '@/features/calendar/calendar-picker'
 import { TaskBar } from '@/features/tasks/task-bar'
+import { TaskSidebar } from '@/features/tasks/task-sidebar'
 import { GroceryPanel } from '@/features/grocery/grocery-panel'
 import { NotesPanel } from '@/features/notes/notes-panel'
 import { useTasks, useSyncTasks } from '@/features/tasks/use-tasks'
@@ -221,8 +222,13 @@ export function Dashboard() {
         <AdvancedSettings onClose={() => setAdvancedOpen(false)} />
       )}
 
-      {/* ── Main: calendar + optional side drawer ── */}
+      {/* ── Main: task sidebar + calendar + optional right drawer ── */}
       <div className="flex flex-1 min-h-0 gap-3 p-3 pb-0">
+
+        {/* Task sidebar — always-on left column */}
+        <div className="w-72 flex-shrink-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-sand-200/60">
+          <TaskSidebar events={events} />
+        </div>
 
         <div className="flex-1 min-w-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-sand-200/60 p-4">
           <CalendarView
@@ -231,6 +237,8 @@ export function Dashboard() {
             mode={mode}
             onModeChange={setMode}
             headerRight={dotsMenu}
+            onRefresh={() => syncCalendars.mutate()}
+            isRefreshing={syncCalendars.isPending}
           />
         </div>
 

@@ -123,6 +123,7 @@ Deno.serve(async (req) => {
         const events: any[] = eventsData.items ?? []
 
         // Upsert events into calendar_events
+        const fetchedIds: string[] = []
         for (const ev of events) {
           if (ev.status === "cancelled") continue
 
@@ -153,7 +154,28 @@ Deno.serve(async (req) => {
             { onConflict: "family_id,external_event_id" }
           )
 
+          fetchedIds.push(ev.id)
           eventsCount++
+        }
+
+        // Delete events that were removed from Google Calendar.
+        // Query the DB for all events for this calendar in the sync window,
+        // then delete any whose external_event_id is no longer in Google's response.
+        const { data: dbEvents } = await supabase
+          .from("calendar_events")
+          .select("id, external_event_id")
+          .eq("family_id", member.family_id)
+          .eq("source_calendar_id", cal.id)
+          .gte("start_at", timeMin.toISOString())
+          .lte("start_at", timeMax.toISOString())
+          .not("external_event_id", "is", null)
+
+        const toDelete = (dbEvents ?? [])
+          .filter((e: any) => e.external_event_id && !fetchedIds.includes(e.external_event_id))
+          .map((e: any) => e.id)
+
+        if (toDelete.length > 0) {
+          await supabase.from("calendar_events").delete().in("id", toDelete)
         }
       }
 

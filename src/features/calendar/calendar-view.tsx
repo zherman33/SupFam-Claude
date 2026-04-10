@@ -23,6 +23,8 @@ interface CalendarViewProps {
   mode?: CalendarMode
   onModeChange?: (mode: CalendarMode) => void
   headerRight?: React.ReactNode
+  onRefresh?: () => void
+  isRefreshing?: boolean
 }
 
 // Render 26 weeks: 4 back + 22 forward (~5 months forward)
@@ -37,6 +39,8 @@ export function CalendarView({
   mode = 'month',
   onModeChange,
   headerRight,
+  onRefresh,
+  isRefreshing = false,
 }: CalendarViewProps) {
   const today = new Date()
   const anchor = anchorDate ?? today
@@ -174,6 +178,7 @@ export function CalendarView({
   }
 
   const DAY_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  const todayDow = today.getDay() // 0 = Sun … 6 = Sat
 
   return (
     <>
@@ -188,10 +193,28 @@ export function CalendarView({
 
       {/* ── Header ── */}
       <div className="relative flex-shrink-0 flex items-center h-9 mb-2">
-        {/* Month label — absolutely centered on the full width */}
-        <h2 className="absolute inset-x-0 text-center font-body text-base font-semibold text-brown-800 tracking-tight pointer-events-none">
-          {monthLabel}
-        </h2>
+        {/* Month label — absolutely centered; tapping triggers a sync refresh */}
+        <div className="absolute inset-x-0 flex items-center justify-center pointer-events-none">
+          <button
+            className="flex items-center gap-1.5 pointer-events-auto active:opacity-60 transition-opacity disabled:cursor-default"
+            onClick={onRefresh}
+            disabled={!onRefresh || isRefreshing}
+          >
+            <span className="font-body text-base font-semibold text-brown-800 tracking-tight">
+              {monthLabel}
+            </span>
+            {isRefreshing && (
+              <svg
+                className="h-3.5 w-3.5 animate-spin text-brown-700/40"
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
+                <path fill="currentColor" className="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            )}
+          </button>
+        </div>
 
         {/* Right controls — view switcher + ⋯ */}
         <div className="ml-auto flex items-center gap-1.5 relative z-10">
@@ -222,7 +245,9 @@ export function CalendarView({
           <div
             key={d}
             className={`text-center text-[11px] font-semibold uppercase tracking-widest ${
-              i === 0 || i === 6 ? 'text-brown-700/25' : 'text-brown-700/45'
+              i === todayDow
+                ? 'text-terracotta-500'
+                : i === 0 || i === 6 ? 'text-brown-700/25' : 'text-brown-700/45'
             }`}
           >
             {d}
@@ -274,10 +299,15 @@ export function CalendarView({
                   const isWeekend = day.getDay() === 0 || day.getDay() === 6
 
                   type Pill = { type: 'event'; ev: CalendarEvent } | { type: 'task'; task: Task }
-                  const pills: Pill[] = [
-                    ...dayEvents.map(ev => ({ type: 'event' as const, ev })),
+                  // Personal events + tasks float to the top; birthday/holiday pills
+                  // are pinned to the bottom via a flex spacer.
+                  const personalPills: Pill[] = [
+                    ...dayEvents.filter(ev => !isAmbientCalendarEvent(ev)).map(ev => ({ type: 'event' as const, ev })),
                     ...dayTasks.map(task => ({ type: 'task' as const, task })),
                   ]
+                  const ambientPills: Pill[] = dayEvents
+                    .filter(ev => isAmbientCalendarEvent(ev))
+                    .map(ev => ({ type: 'event' as const, ev }))
 
                   return (
                     <div
@@ -285,27 +315,32 @@ export function CalendarView({
                       className={`relative flex flex-col border-r border-sand-100 last:border-r-0 overflow-hidden min-h-0 cursor-pointer
                         ${isOutsideMonth ? 'opacity-25' : ''}
                         ${isWeekend && !isCurrentDay ? 'bg-[#faf8f5]' : 'bg-white'}
-                        ${isCurrentDay ? 'bg-terracotta-500/[0.04]' : ''}
+                        ${isCurrentDay ? 'bg-terracotta-500/[0.09]' : ''}
                       `}
                       onClick={() => setFormDate(day)}
                     >
                       {isCurrentDay && (
-                        <div className="absolute top-0 inset-x-0 h-[2px] bg-terracotta-500 rounded-b" />
+                        <div className="absolute top-0 inset-x-0 h-[3px] bg-terracotta-500" />
                       )}
                       <div className="flex flex-col h-full p-1.5 gap-px">
                         <div className="flex-shrink-0 mb-0.5">
-                          <span className={`
-                            inline-flex h-[18px] w-[18px] items-center justify-center rounded-full
-                            text-[10px] font-bold leading-none
-                            ${isCurrentDay ? 'bg-terracotta-500 text-white'
-                              : isWeekend ? 'text-brown-700/30'
-                              : 'text-brown-700/60'}
-                          `}>
-                            {format(day, 'd')}
-                          </span>
+                          {isCurrentDay ? (
+                            // Oversized terracotta circle — legible from across the room
+                            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-terracotta-500 text-white text-[15px] font-display leading-none">
+                              {format(day, 'd')}
+                            </span>
+                          ) : (
+                            <span className={`
+                              inline-flex h-[18px] w-[18px] items-center justify-center rounded-full
+                              text-[10px] font-bold leading-none
+                              ${isWeekend ? 'text-brown-700/30' : 'text-brown-700/60'}
+                            `}>
+                              {format(day, 'd')}
+                            </span>
+                          )}
                         </div>
                         <div className="flex flex-col gap-px flex-1 min-h-0 overflow-hidden">
-                          {pills.map((pill) => pill.type === 'event'
+                          {personalPills.map((pill) => pill.type === 'event'
                             ? <EventPill
                                 key={`${pill.ev.id}-${key}`}
                                 ev={pill.ev}
@@ -313,6 +348,19 @@ export function CalendarView({
                                 onClick={e => { e.stopPropagation(); setEditEvent(pill.ev) }}
                               />
                             : <TaskPill key={pill.task.id} task={pill.task} />
+                          )}
+                          {ambientPills.length > 0 && (
+                            <>
+                              <div className="flex-1 min-h-0" />
+                              {ambientPills.map((pill) => (
+                                <EventPill
+                                  key={`${pill.ev.id}-${key}`}
+                                  ev={pill.ev}
+                                  colorRules={colorRules}
+                                  onClick={e => { e.stopPropagation(); setEditEvent(pill.ev) }}
+                                />
+                              ))}
+                            </>
                           )}
                         </div>
                       </div>
@@ -330,6 +378,15 @@ export function CalendarView({
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+// Birthday (#contacts) and holiday (#holiday) calendars are "ambient" —
+// they render compact and are pinned to the bottom of the day cell.
+function isAmbientCalendarEvent(ev: CalendarEvent): boolean {
+  return !!(
+    ev.source_calendar_id?.includes('#holiday') ||
+    ev.source_calendar_id?.includes('#contacts')
+  )
+}
 
 function darkenForReadability(hex: string): string {
   if (!hex || hex.length < 7) return hex
@@ -349,6 +406,12 @@ function EventPill({ ev, colorRules, onClick }: { ev: CalendarEvent; colorRules?
   const ruleColor = applyColorRules(ev.title, colorRules)
   const color = ruleColor ?? ev.color ?? '#5B7FB5'
   const textColor = darkenForReadability(color)
+
+  // Birthdays (#contacts calendar) and holidays (#holiday calendar) stay
+  // single-line at the compact size. Everything else is a personal event
+  // and gets a taller two-line pill for iPad readability.
+  const isAmbient = isAmbientCalendarEvent(ev)
+
   return (
     <div
       className="flex items-stretch rounded overflow-hidden flex-shrink-0 cursor-pointer hover:brightness-95 active:brightness-90 transition-[filter]"
@@ -357,16 +420,31 @@ function EventPill({ ev, colorRules, onClick }: { ev: CalendarEvent; colorRules?
       onClick={onClick}
     >
       <div className="w-[3px] flex-shrink-0 rounded-l" style={{ backgroundColor: color }} />
-      <div className="flex items-baseline gap-1 px-1 py-px min-w-0 flex-1">
-        <span className="truncate text-[13px] font-semibold leading-snug" style={{ color: textColor }}>
-          {ev.title}
-        </span>
-        {!ev.all_day && (
-          <span className="flex-shrink-0 text-[10px] tabular-nums leading-snug opacity-60" style={{ color: textColor }}>
-            {format(parseISO(ev.start_at), 'h:mma').replace(':00', '')}
+      {isAmbient ? (
+        // Single-line compact layout (birthdays & holidays)
+        <div className="flex items-baseline gap-1 px-1 py-px min-w-0 flex-1">
+          <span className="truncate text-[13px] font-semibold leading-snug" style={{ color: textColor }}>
+            {ev.title}
           </span>
-        )}
-      </div>
+          {!ev.all_day && (
+            <span className="flex-shrink-0 text-[10px] tabular-nums leading-snug opacity-60" style={{ color: textColor }}>
+              {format(parseISO(ev.start_at), 'h:mma').replace(':00', '')}
+            </span>
+          )}
+        </div>
+      ) : (
+        // Two-line layout for personal events — bigger text, time on its own line
+        <div className="flex flex-col justify-center gap-0.5 px-1.5 py-1.5 min-w-0 flex-1">
+          <span className="truncate text-[15px] font-semibold leading-snug" style={{ color: textColor }}>
+            {ev.title}
+          </span>
+          {!ev.all_day && (
+            <span className="text-[11px] tabular-nums leading-none opacity-60" style={{ color: textColor }}>
+              {format(parseISO(ev.start_at), 'h:mma').replace(':00', '')}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   )
 }
