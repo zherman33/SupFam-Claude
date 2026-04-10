@@ -371,6 +371,14 @@ function EventPill({ ev, colorRules, onClick }: { ev: CalendarEvent; colorRules?
   const ruleColor = applyColorRules(ev.title, colorRules)
   const color = ruleColor ?? ev.color ?? '#5B7FB5'
   const textColor = darkenForReadability(color)
+
+  // Birthdays (#contacts calendar) and holidays (#holiday calendar) stay
+  // single-line at the compact size. Everything else is a personal event
+  // and gets a taller two-line pill for iPad readability.
+  const isAmbient =
+    ev.source_calendar_id?.includes('#holiday') ||
+    ev.source_calendar_id?.includes('#contacts')
+
   return (
     <div
       className="flex items-stretch rounded overflow-hidden flex-shrink-0 cursor-pointer hover:brightness-95 active:brightness-90 transition-[filter]"
@@ -379,16 +387,31 @@ function EventPill({ ev, colorRules, onClick }: { ev: CalendarEvent; colorRules?
       onClick={onClick}
     >
       <div className="w-[3px] flex-shrink-0 rounded-l" style={{ backgroundColor: color }} />
-      <div className="flex items-baseline gap-1 px-1 py-px min-w-0 flex-1">
-        <span className="truncate text-[13px] font-semibold leading-snug" style={{ color: textColor }}>
-          {ev.title}
-        </span>
-        {!ev.all_day && (
-          <span className="flex-shrink-0 text-[10px] tabular-nums leading-snug opacity-60" style={{ color: textColor }}>
-            {format(parseISO(ev.start_at), 'h:mma').replace(':00', '')}
+      {isAmbient ? (
+        // Single-line compact layout (birthdays & holidays)
+        <div className="flex items-baseline gap-1 px-1 py-px min-w-0 flex-1">
+          <span className="truncate text-[13px] font-semibold leading-snug" style={{ color: textColor }}>
+            {ev.title}
           </span>
-        )}
-      </div>
+          {!ev.all_day && (
+            <span className="flex-shrink-0 text-[10px] tabular-nums leading-snug opacity-60" style={{ color: textColor }}>
+              {format(parseISO(ev.start_at), 'h:mma').replace(':00', '')}
+            </span>
+          )}
+        </div>
+      ) : (
+        // Two-line layout for personal events — bigger text, time on its own line
+        <div className="flex flex-col justify-center gap-0.5 px-1.5 py-1.5 min-w-0 flex-1">
+          <span className="truncate text-[15px] font-semibold leading-snug" style={{ color: textColor }}>
+            {ev.title}
+          </span>
+          {!ev.all_day && (
+            <span className="text-[11px] tabular-nums leading-none opacity-60" style={{ color: textColor }}>
+              {format(parseISO(ev.start_at), 'h:mma').replace(':00', '')}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   )
 }
