@@ -231,6 +231,8 @@ export function Dashboard() {
             mode={mode}
             onModeChange={setMode}
             headerRight={dotsMenu}
+            onRefresh={() => syncCalendars.mutate()}
+            isRefreshing={syncCalendars.isPending}
           />
         </div>
 

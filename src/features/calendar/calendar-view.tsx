@@ -23,6 +23,8 @@ interface CalendarViewProps {
   mode?: CalendarMode
   onModeChange?: (mode: CalendarMode) => void
   headerRight?: React.ReactNode
+  onRefresh?: () => void
+  isRefreshing?: boolean
 }
 
 // Render 26 weeks: 4 back + 22 forward (~5 months forward)
@@ -37,6 +39,8 @@ export function CalendarView({
   mode = 'month',
   onModeChange,
   headerRight,
+  onRefresh,
+  isRefreshing = false,
 }: CalendarViewProps) {
   const today = new Date()
   const anchor = anchorDate ?? today
@@ -188,10 +192,28 @@ export function CalendarView({
 
       {/* ── Header ── */}
       <div className="relative flex-shrink-0 flex items-center h-9 mb-2">
-        {/* Month label — absolutely centered on the full width */}
-        <h2 className="absolute inset-x-0 text-center font-body text-base font-semibold text-brown-800 tracking-tight pointer-events-none">
-          {monthLabel}
-        </h2>
+        {/* Month label — absolutely centered; tapping triggers a sync refresh */}
+        <div className="absolute inset-x-0 flex items-center justify-center pointer-events-none">
+          <button
+            className="flex items-center gap-1.5 pointer-events-auto active:opacity-60 transition-opacity disabled:cursor-default"
+            onClick={onRefresh}
+            disabled={!onRefresh || isRefreshing}
+          >
+            <span className="font-body text-base font-semibold text-brown-800 tracking-tight">
+              {monthLabel}
+            </span>
+            {isRefreshing && (
+              <svg
+                className="h-3.5 w-3.5 animate-spin text-brown-700/40"
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
+                <path fill="currentColor" className="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            )}
+          </button>
+        </div>
 
         {/* Right controls — view switcher + ⋯ */}
         <div className="ml-auto flex items-center gap-1.5 relative z-10">
