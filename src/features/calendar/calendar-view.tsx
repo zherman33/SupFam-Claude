@@ -178,6 +178,7 @@ export function CalendarView({
   }
 
   const DAY_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  const todayDow = today.getDay() // 0 = Sun … 6 = Sat
 
   return (
     <>
@@ -244,7 +245,9 @@ export function CalendarView({
           <div
             key={d}
             className={`text-center text-[11px] font-semibold uppercase tracking-widest ${
-              i === 0 || i === 6 ? 'text-brown-700/25' : 'text-brown-700/45'
+              i === todayDow
+                ? 'text-terracotta-500'
+                : i === 0 || i === 6 ? 'text-brown-700/25' : 'text-brown-700/45'
             }`}
           >
             {d}
@@ -312,24 +315,29 @@ export function CalendarView({
                       className={`relative flex flex-col border-r border-sand-100 last:border-r-0 overflow-hidden min-h-0 cursor-pointer
                         ${isOutsideMonth ? 'opacity-25' : ''}
                         ${isWeekend && !isCurrentDay ? 'bg-[#faf8f5]' : 'bg-white'}
-                        ${isCurrentDay ? 'bg-terracotta-500/[0.04]' : ''}
+                        ${isCurrentDay ? 'bg-terracotta-500/[0.09]' : ''}
                       `}
                       onClick={() => setFormDate(day)}
                     >
                       {isCurrentDay && (
-                        <div className="absolute top-0 inset-x-0 h-[2px] bg-terracotta-500 rounded-b" />
+                        <div className="absolute top-0 inset-x-0 h-[3px] bg-terracotta-500" />
                       )}
                       <div className="flex flex-col h-full p-1.5 gap-px">
                         <div className="flex-shrink-0 mb-0.5">
-                          <span className={`
-                            inline-flex h-[18px] w-[18px] items-center justify-center rounded-full
-                            text-[10px] font-bold leading-none
-                            ${isCurrentDay ? 'bg-terracotta-500 text-white'
-                              : isWeekend ? 'text-brown-700/30'
-                              : 'text-brown-700/60'}
-                          `}>
-                            {format(day, 'd')}
-                          </span>
+                          {isCurrentDay ? (
+                            // Oversized terracotta circle — legible from across the room
+                            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-terracotta-500 text-white text-[15px] font-display leading-none">
+                              {format(day, 'd')}
+                            </span>
+                          ) : (
+                            <span className={`
+                              inline-flex h-[18px] w-[18px] items-center justify-center rounded-full
+                              text-[10px] font-bold leading-none
+                              ${isWeekend ? 'text-brown-700/30' : 'text-brown-700/60'}
+                            `}>
+                              {format(day, 'd')}
+                            </span>
+                          )}
                         </div>
                         <div className="flex flex-col gap-px flex-1 min-h-0 overflow-hidden">
                           {personalPills.map((pill) => pill.type === 'event'
