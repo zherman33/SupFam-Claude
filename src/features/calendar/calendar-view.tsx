@@ -305,7 +305,7 @@ export function CalendarView({
                     ...dayEvents.filter(ev => !isAmbientCalendarEvent(ev)).map(ev => ({ type: 'event' as const, ev })),
                     ...dayTasks.map(task => ({ type: 'task' as const, task })),
                   ]
-                  const ambientPills: Pill[] = dayEvents
+                  const ambientPills: { type: 'event'; ev: CalendarEvent }[] = dayEvents
                     .filter(ev => isAmbientCalendarEvent(ev))
                     .map(ev => ({ type: 'event' as const, ev }))
 
