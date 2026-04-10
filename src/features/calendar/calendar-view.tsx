@@ -296,10 +296,15 @@ export function CalendarView({
                   const isWeekend = day.getDay() === 0 || day.getDay() === 6
 
                   type Pill = { type: 'event'; ev: CalendarEvent } | { type: 'task'; task: Task }
-                  const pills: Pill[] = [
-                    ...dayEvents.map(ev => ({ type: 'event' as const, ev })),
+                  // Personal events + tasks float to the top; birthday/holiday pills
+                  // are pinned to the bottom via a flex spacer.
+                  const personalPills: Pill[] = [
+                    ...dayEvents.filter(ev => !isAmbientCalendarEvent(ev)).map(ev => ({ type: 'event' as const, ev })),
                     ...dayTasks.map(task => ({ type: 'task' as const, task })),
                   ]
+                  const ambientPills: Pill[] = dayEvents
+                    .filter(ev => isAmbientCalendarEvent(ev))
+                    .map(ev => ({ type: 'event' as const, ev }))
 
                   return (
                     <div
@@ -327,7 +332,7 @@ export function CalendarView({
                           </span>
                         </div>
                         <div className="flex flex-col gap-px flex-1 min-h-0 overflow-hidden">
-                          {pills.map((pill) => pill.type === 'event'
+                          {personalPills.map((pill) => pill.type === 'event'
                             ? <EventPill
                                 key={`${pill.ev.id}-${key}`}
                                 ev={pill.ev}
@@ -335,6 +340,19 @@ export function CalendarView({
                                 onClick={e => { e.stopPropagation(); setEditEvent(pill.ev) }}
                               />
                             : <TaskPill key={pill.task.id} task={pill.task} />
+                          )}
+                          {ambientPills.length > 0 && (
+                            <>
+                              <div className="flex-1 min-h-0" />
+                              {ambientPills.map((pill) => (
+                                <EventPill
+                                  key={`${pill.ev.id}-${key}`}
+                                  ev={pill.ev}
+                                  colorRules={colorRules}
+                                  onClick={e => { e.stopPropagation(); setEditEvent(pill.ev) }}
+                                />
+                              ))}
+                            </>
                           )}
                         </div>
                       </div>
@@ -352,6 +370,15 @@ export function CalendarView({
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+// Birthday (#contacts) and holiday (#holiday) calendars are "ambient" —
+// they render compact and are pinned to the bottom of the day cell.
+function isAmbientCalendarEvent(ev: CalendarEvent): boolean {
+  return !!(
+    ev.source_calendar_id?.includes('#holiday') ||
+    ev.source_calendar_id?.includes('#contacts')
+  )
+}
 
 function darkenForReadability(hex: string): string {
   if (!hex || hex.length < 7) return hex
@@ -375,9 +402,7 @@ function EventPill({ ev, colorRules, onClick }: { ev: CalendarEvent; colorRules?
   // Birthdays (#contacts calendar) and holidays (#holiday calendar) stay
   // single-line at the compact size. Everything else is a personal event
   // and gets a taller two-line pill for iPad readability.
-  const isAmbient =
-    ev.source_calendar_id?.includes('#holiday') ||
-    ev.source_calendar_id?.includes('#contacts')
+  const isAmbient = isAmbientCalendarEvent(ev)
 
   return (
     <div
