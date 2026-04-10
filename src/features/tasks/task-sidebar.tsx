@@ -6,9 +6,10 @@ import { useFamilyMembers } from '@/features/auth/use-family-member'
 
 interface TaskSidebarProps {
   events?: CalendarEvent[]
+  onCollapse?: () => void
 }
 
-export function TaskSidebar({ events = [] }: TaskSidebarProps) {
+export function TaskSidebar({ events = [], onCollapse }: TaskSidebarProps) {
   const { data: tasks } = useTasks()
   const { data: members } = useFamilyMembers()
   const createTask = useCreateTask()
@@ -57,6 +58,24 @@ export function TaskSidebar({ events = [] }: TaskSidebarProps) {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
+
+      {/* ── Header with collapse button ── */}
+      <div className="flex-shrink-0 flex items-center justify-between px-4 py-2.5 border-b border-sand-100">
+        <span className="font-display text-[11px] uppercase tracking-widest text-brown-700/50 select-none">
+          Tasks &amp; Today
+        </span>
+        {onCollapse && (
+          <button
+            onClick={onCollapse}
+            className="flex h-6 w-6 items-center justify-center rounded-lg text-brown-700/30 hover:bg-cream-100 hover:text-brown-700 transition-colors"
+            aria-label="Close panel"
+          >
+            <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
+              <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          </button>
+        )}
+      </div>
 
       {/* ── Scrollable three-tier body ── */}
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide">

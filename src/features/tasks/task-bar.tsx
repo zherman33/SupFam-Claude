@@ -3,7 +3,7 @@ import { format, isPast, isToday, parseISO } from 'date-fns'
 import { useTasks, useCreateTask, useToggleTask, useDeleteTask } from './use-tasks'
 import { useFamilyMembers } from '@/features/auth/use-family-member'
 
-export function TaskBar() {
+export function TaskBar({ onExpand }: { onExpand?: () => void }) {
   const { data: tasks } = useTasks()
   const { data: members } = useFamilyMembers()
   const createTask = useCreateTask()
@@ -91,6 +91,23 @@ export function TaskBar() {
 
       {/* Task strip */}
       <div className="flex h-12 items-center gap-2 overflow-x-auto px-4 scrollbar-hide">
+        {/* Tasks panel button */}
+        {onExpand && (
+          <button
+            onClick={onExpand}
+            className="flex h-7 flex-shrink-0 items-center gap-1.5 rounded-full border border-sand-200 px-3 text-xs font-medium text-brown-700/70 transition-colors hover:bg-cream-100 hover:text-brown-800"
+          >
+            <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
+              <rect x="1" y="1" width="4" height="10" rx="1" stroke="currentColor" strokeWidth="1.3"/>
+              <path d="M7 3.5h4M7 6h4M7 8.5h2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+            </svg>
+            Tasks
+          </button>
+        )}
+
+        {/* Divider before add */}
+        {onExpand && <div className="h-5 w-px flex-shrink-0 bg-sand-200" />}
+
         {/* Add button */}
         <button
           onClick={() => setShowAdd(true)}
