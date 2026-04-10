@@ -325,8 +325,8 @@ export function CalendarView({
                       <div className="flex flex-col h-full p-1.5 gap-px">
                         <div className="flex-shrink-0 mb-0.5">
                           {isCurrentDay ? (
-                            // Oversized terracotta circle — legible from across the room
-                            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-terracotta-500 text-white text-[15px] font-display leading-none">
+                            // Outline ring — subtle, lighter feel
+                            <span className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full border border-terracotta-400 text-terracotta-500 text-[11px] font-semibold leading-none">
                               {format(day, 'd')}
                             </span>
                           ) : (
@@ -401,16 +401,23 @@ function darkenForReadability(hex: string): string {
   return `#${dr.toString(16).padStart(2, '0')}${dg.toString(16).padStart(2, '0')}${db.toString(16).padStart(2, '0')}`
 }
 
+function formatTimeShort(dateStr: string): string {
+  return format(parseISO(dateStr), 'h:mma')
+    .replace(':00', '')
+    .toLowerCase()
+    .replace('am', 'a')
+    .replace('pm', 'p')
+}
+
 function EventPill({ ev, colorRules, onClick }: { ev: CalendarEvent; colorRules?: import('@/features/settings/use-event-color-rules').EventColorRule[]; onClick?: (e: React.MouseEvent) => void }) {
   // Color rule overrides take priority over the calendar's default color
   const ruleColor = applyColorRules(ev.title, colorRules)
   const color = ruleColor ?? ev.color ?? '#5B7FB5'
   const textColor = darkenForReadability(color)
 
-  // Birthdays (#contacts calendar) and holidays (#holiday calendar) stay
-  // single-line at the compact size. Everything else is a personal event
-  // and gets a taller two-line pill for iPad readability.
-  const isAmbient = isAmbientCalendarEvent(ev)
+  const label = !ev.all_day
+    ? `${formatTimeShort(ev.start_at)} ${ev.title}`
+    : ev.title
 
   return (
     <div
@@ -420,31 +427,11 @@ function EventPill({ ev, colorRules, onClick }: { ev: CalendarEvent; colorRules?
       onClick={onClick}
     >
       <div className="w-[3px] flex-shrink-0 rounded-l" style={{ backgroundColor: color }} />
-      {isAmbient ? (
-        // Single-line compact layout (birthdays & holidays)
-        <div className="flex items-baseline gap-1 px-1 py-px min-w-0 flex-1">
-          <span className="truncate text-[13px] font-semibold leading-snug" style={{ color: textColor }}>
-            {ev.title}
-          </span>
-          {!ev.all_day && (
-            <span className="flex-shrink-0 text-[10px] tabular-nums leading-snug opacity-60" style={{ color: textColor }}>
-              {format(parseISO(ev.start_at), 'h:mma').replace(':00', '')}
-            </span>
-          )}
-        </div>
-      ) : (
-        // Two-line layout for personal events — bigger text, time on its own line
-        <div className="flex flex-col justify-center gap-0.5 px-1.5 py-1.5 min-w-0 flex-1">
-          <span className="truncate text-[15px] font-semibold leading-snug" style={{ color: textColor }}>
-            {ev.title}
-          </span>
-          {!ev.all_day && (
-            <span className="text-[11px] tabular-nums leading-none opacity-60" style={{ color: textColor }}>
-              {format(parseISO(ev.start_at), 'h:mma').replace(':00', '')}
-            </span>
-          )}
-        </div>
-      )}
+      <div className="flex items-center px-1 py-px min-w-0 flex-1">
+        <span className="truncate text-[10px] font-medium leading-snug" style={{ color: textColor }}>
+          {label}
+        </span>
+      </div>
     </div>
   )
 }

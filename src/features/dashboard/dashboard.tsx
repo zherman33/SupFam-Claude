@@ -22,6 +22,7 @@ export function Dashboard() {
   const syncCalendars = useSyncCalendars()
   const syncTasks = useSyncTasks()
 
+  const [sidebarExpanded, setSidebarExpanded] = useState(false)
   const [mode, setMode] = useState<CalendarMode>('month')
   const [drawer, setDrawer] = useState<Drawer>(null)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -225,10 +226,12 @@ export function Dashboard() {
       {/* ── Main: task sidebar + calendar + optional right drawer ── */}
       <div className="flex flex-1 min-h-0 gap-3 p-3 pb-0">
 
-        {/* Task sidebar — always-on left column */}
-        <div className="w-72 flex-shrink-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-sand-200/60">
-          <TaskSidebar events={events} />
-        </div>
+        {/* Task sidebar — shown only when expanded */}
+        {sidebarExpanded && (
+          <div className="w-72 flex-shrink-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-sand-200/60">
+            <TaskSidebar events={events} onCollapse={() => setSidebarExpanded(false)} />
+          </div>
+        )}
 
         <div className="flex-1 min-w-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-sand-200/60 p-4">
           <CalendarView
@@ -275,10 +278,12 @@ export function Dashboard() {
         )}
       </div>
 
-      {/* ── Task bar ── */}
-      <div className="mx-3 my-3 flex-shrink-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-sand-200/60">
-        <TaskBar />
-      </div>
+      {/* ── Task bar — only when sidebar is collapsed ── */}
+      {!sidebarExpanded && (
+        <div className="mx-3 my-3 flex-shrink-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-sand-200/60">
+          <TaskBar onExpand={() => setSidebarExpanded(true)} />
+        </div>
+      )}
     </div>
   )
 }
