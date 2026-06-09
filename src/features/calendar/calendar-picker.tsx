@@ -1,4 +1,16 @@
-import { useConnectedCalendars, useToggleCalendarVisibility, useSyncCalendars } from './use-calendar'
+import { useState } from 'react'
+import { useConnectedCalendars, useToggleCalendarVisibility, useSyncCalendars, useUpdateCalendarColor } from './use-calendar'
+import { getCalendarColor } from '@/features/settings/theme-context'
+
+const COLOR_PALETTE = [
+  { name: 'Terracotta', hex: '#C4714F', cssVar: 'var(--color-cal-1)' },
+  { name: 'Sage', hex: '#5E7C67', cssVar: 'var(--color-cal-2)' },
+  { name: 'Steel Blue', hex: '#4F7396', cssVar: 'var(--color-cal-3)' },
+  { name: 'Lavender', hex: '#7B6F9A', cssVar: 'var(--color-cal-4)' },
+  { name: 'Rose', hex: '#BC5D76', cssVar: 'var(--color-cal-5)' },
+  { name: 'Ochre', hex: '#C68A2C', cssVar: 'var(--color-cal-6)' },
+  { name: 'Slate', hex: '#6E7A8A', cssVar: 'var(--color-cal-7)' }
+]
 
 interface CalendarPickerProps {
   onClose: () => void
@@ -10,6 +22,8 @@ export function CalendarPicker({ onClose, inline = false }: CalendarPickerProps)
   const { data: calendars, isLoading } = useConnectedCalendars()
   const toggle = useToggleCalendarVisibility()
   const sync = useSyncCalendars()
+  const updateColor = useUpdateCalendarColor()
+  const [activeColorPickerId, setActiveColorPickerId] = useState<string | null>(null)
 
   // Group by owner
   const byOwner = new Map<string, typeof calendars>()
@@ -27,7 +41,7 @@ export function CalendarPicker({ onClose, inline = false }: CalendarPickerProps)
         {inline && <span className="text-xs text-brown-700/50">Calendars</span>}
         <div className="flex items-center gap-2">
           <button
-            onClick={() => sync.mutate()}
+            onClick={() => sync.mutate(undefined)}
             disabled={sync.isPending}
             className="flex items-center gap-1 text-xs font-semibold text-brown-700/50 hover:text-terracotta-500 transition-colors disabled:opacity-40"
           >
@@ -71,39 +85,95 @@ export function CalendarPicker({ onClose, inline = false }: CalendarPickerProps)
             </p>
           </div>
           <div className="px-2 py-1 space-y-px">
-            {cals!.map(cal => (
-              <label
-                key={cal.id}
-                className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-cream-50"
-              >
-                {/* Color swatch with check */}
-                <div className="relative flex-shrink-0 h-4 w-4">
+            {cals!.map(cal => {
+              const isPickerOpen = activeColorPickerId === cal.id
+              return (
+                <div
+                  key={cal.id}
+                  onClick={() => toggle.mutate({ id: cal.id, is_visible: !cal.is_visible })}
+                  className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-cream-50 relative cursor-pointer select-none"
+                >
+                  {/* Visibility Checkbox */}
                   <div
-                    className="h-4 w-4 rounded"
-                    style={{
-                      backgroundColor: cal.color ?? '#C4714F',
-                      opacity: cal.is_visible ? 1 : 0.25,
-                    }}
-                  />
-                  {cal.is_visible && (
-                    <svg className="absolute inset-0 m-auto h-2.5 w-2.5 text-white" viewBox="0 0 10 10" fill="none">
-                      <path d="M2 5l2.5 2.5 3.5-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  )}
+                    className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition-colors ${
+                      cal.is_visible
+                        ? 'border-terracotta-400 bg-terracotta-400 text-white'
+                        : 'border-sand-400 bg-white'
+                    }`}
+                  >
+                    {cal.is_visible && (
+                      <svg className="h-2.5 w-2.5" viewBox="0 0 10 10" fill="none">
+                        <path
+                          d="M1.5 5l2.5 2.5 4.5-4.5"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    )}
+                  </div>
+
+                  {/* Color swatch trigger */}
+                  <div className="relative flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setActiveColorPickerId(isPickerOpen ? null : cal.id)
+                      }}
+                      className="relative flex-shrink-0 h-4 w-4 rounded-full border border-sand-200/60 hover:scale-110 active:scale-95 focus:outline-none transition-transform cursor-pointer flex items-center justify-center"
+                      style={{
+                        backgroundColor: getCalendarColor(cal.color),
+                      }}
+                      title="Change calendar color"
+                    >
+                      {isPickerOpen && (
+                        <div className="absolute inset-0 m-auto h-1 w-1 rounded-full bg-white animate-ping" />
+                      )}
+                    </button>
+
+                    {/* Inline Color Picker Popover */}
+                    {isPickerOpen && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setActiveColorPickerId(null)
+                          }}
+                        />
+                        <div className="absolute left-6 -top-1.5 z-50 flex gap-1 p-1 rounded-lg border border-sand-200 bg-white shadow-lg animate-in fade-in slide-in-from-left-1 duration-150">
+                          {COLOR_PALETTE.map((color) => (
+                            <button
+                              key={color.hex}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                updateColor.mutate({ id: cal.id, color: color.hex })
+                                setActiveColorPickerId(null)
+                              }}
+                              className="h-4 w-4 rounded-full hover:scale-110 active:scale-95 transition-transform border border-sand-200/50 cursor-pointer flex items-center justify-center"
+                              style={{ backgroundColor: color.cssVar }}
+                              title={color.name}
+                            >
+                              {getCalendarColor(cal.color) === color.cssVar && (
+                                <div className="h-1.5 w-1.5 rounded-full bg-white shadow-sm" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Clickable text to toggle visibility */}
+                  <span className={`text-xs block truncate flex-1 ${cal.is_visible ? 'text-brown-800' : 'text-brown-700/35'}`}>
+                    {cal.calendar_name ?? cal.calendar_id}
+                  </span>
                 </div>
-
-                <span className={`flex-1 text-xs ${cal.is_visible ? 'text-brown-800' : 'text-brown-700/35'}`}>
-                  {cal.calendar_name ?? cal.calendar_id}
-                </span>
-
-                <input
-                  type="checkbox"
-                  className="sr-only"
-                  checked={cal.is_visible}
-                  onChange={e => toggle.mutate({ id: cal.id, is_visible: e.target.checked })}
-                />
-              </label>
-            ))}
+              )
+            })}
           </div>
         </div>
       ))}

@@ -41,12 +41,12 @@ export function useCalendarEvents() {
     staleTime: 1000 * 60 * 5,
     refetchInterval: 1000 * 60,
     queryFn: async () => {
-      // Fetch events ±5 weeks from today
+      // Fetch events covering the entire grid range (-90 days to +400 days to cover scrolled weeks + 3-week sync buffers)
       const now = new Date()
       const from = new Date(now)
-      from.setDate(now.getDate() - 28)  // 4 weeks back
+      from.setDate(now.getDate() - 90)  // 90 days back
       const to = new Date(now)
-      to.setDate(now.getDate() + 84)    // 12 weeks forward
+      to.setDate(now.getDate() + 400)   // 400 days forward
 
       const { data, error } = await supabase
         .from('calendar_events')
@@ -126,16 +126,51 @@ export function useToggleCalendarVisibility() {
   })
 }
 
+// ─── Update a calendar's color ───────────────────────────────────────────
+export function useUpdateCalendarColor() {
+  const queryClient = useQueryClient()
+  const { data: member } = useFamilyMember()
+
+  return useMutation({
+    mutationFn: async ({ id, color }: { id: string; color: string }) => {
+      const { error } = await supabase
+        .from('connected_calendars')
+        .update({ color })
+        .eq('id', id)
+      if (error) throw error
+    },
+    onMutate: async ({ id, color }) => {
+      await queryClient.cancelQueries({ queryKey: ['connected-calendars', member?.family_id] })
+      const prev = queryClient.getQueryData<ConnectedCalendar[]>(['connected-calendars', member?.family_id])
+      queryClient.setQueryData<ConnectedCalendar[]>(
+        ['connected-calendars', member?.family_id],
+        (old) => old?.map((c) => (c.id === id ? { ...c, color } : c)) ?? []
+      )
+      return { prev }
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['connected-calendars', member?.family_id], ctx.prev)
+    },
+    onSuccess: () => {
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['connected-calendars', member?.family_id] })
+        // Invalidate events too, since they derive their color from calendars
+        queryClient.invalidateQueries({ queryKey: ['calendar-events', member?.family_id] })
+      }, 500)
+    },
+  })
+}
+
 // ─── Trigger a calendar sync via Edge Function ────────────────────────────
 export function useSyncCalendars() {
   const queryClient = useQueryClient()
   const { data: member } = useFamilyMember()
 
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async (variables: { timeMin?: string; timeMax?: string } | void) => {
       const { data: { session } } = await supabase.auth.getSession()
       const res = await supabase.functions.invoke('sync-calendars', {
-        body: {},
+        body: variables || {},
         headers: session?.access_token
           ? { Authorization: `Bearer ${session.access_token}` }
           : {},

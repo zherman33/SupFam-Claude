@@ -35,10 +35,10 @@ export function TaskSidebar({ events = [], onCollapse }: TaskSidebarProps) {
       return a.start_at.localeCompare(b.start_at)
     })
 
-  // ── Tasks split into unscheduled / scheduled ─────────────────────────────
+  // ── Tasks ────────────────────────────────────────────────────────────────
   const incomplete = (tasks ?? []).filter(t => !t.is_complete)
-  const unscheduled = incomplete.filter(t => !t.due_date)
-  const scheduled = incomplete
+  const unscheduledTasks = incomplete.filter(t => !t.due_date)
+  const scheduledTasks = incomplete
     .filter(t => !!t.due_date)
     .sort((a, b) => a.due_date!.localeCompare(b.due_date!))
 
@@ -60,24 +60,25 @@ export function TaskSidebar({ events = [], onCollapse }: TaskSidebarProps) {
     <div className="flex flex-col h-full overflow-hidden">
 
       {/* ── Header with collapse button ── */}
-      <div className="flex-shrink-0 flex items-center justify-between px-4 py-2.5 border-b border-sand-100">
-        <span className="font-display text-[11px] uppercase tracking-widest text-brown-700/50 select-none">
-          Tasks &amp; Today
+      <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 border-b border-sand-100">
+        <span className="font-handwritten text-2xl text-terracotta-500 select-none leading-none pt-0.5">
+          Sup Fam
         </span>
         {onCollapse && (
           <button
             onClick={onCollapse}
             className="flex h-6 w-6 items-center justify-center rounded-lg text-brown-700/30 hover:bg-cream-100 hover:text-brown-700 transition-colors"
-            aria-label="Close panel"
+            aria-label="Collapse panel"
           >
-            <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
-              <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none">
+              <rect x="1.5" y="1.5" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+              <path d="M5.5 1.5v13M11 5L8 8l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
         )}
       </div>
 
-      {/* ── Scrollable three-tier body ── */}
+      {/* ── Scrollable body ── */}
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide">
 
         {/* Tier 1 — Today's Events */}
@@ -96,15 +97,16 @@ export function TaskSidebar({ events = [], onCollapse }: TaskSidebarProps) {
 
         {/* Tier 2 — Unscheduled Tasks */}
         <section>
-          <SectionLabel>Unscheduled</SectionLabel>
-          {unscheduled.length === 0 ? (
-            <EmptyHint>Nothing floating</EmptyHint>
+          <SectionLabel>Unscheduled Tasks</SectionLabel>
+          {unscheduledTasks.length === 0 ? (
+            <EmptyHint>No unscheduled tasks</EmptyHint>
           ) : (
-            <ul className="px-3 pb-3 space-y-px">
-              {unscheduled.map(task => (
+            <ul className="px-3 pb-1.5 space-y-px">
+              {unscheduledTasks.map(task => (
                 <TaskRow
                   key={task.id}
                   task={task}
+                  showDate={false}
                   onToggle={() => toggleTask.mutate({ id: task.id, is_complete: true })}
                   onDelete={() => deleteTask.mutate(task.id)}
                 />
@@ -117,16 +119,16 @@ export function TaskSidebar({ events = [], onCollapse }: TaskSidebarProps) {
 
         {/* Tier 3 — Scheduled Tasks */}
         <section>
-          <SectionLabel>Coming up</SectionLabel>
-          {scheduled.length === 0 ? (
-            <EmptyHint>Nothing scheduled</EmptyHint>
+          <SectionLabel>Scheduled Tasks</SectionLabel>
+          {scheduledTasks.length === 0 ? (
+            <EmptyHint>No scheduled tasks</EmptyHint>
           ) : (
-            <ul className="px-3 pb-4 space-y-px">
-              {scheduled.map(task => (
+            <ul className="px-3 pb-1.5 space-y-px">
+              {scheduledTasks.map(task => (
                 <TaskRow
                   key={task.id}
                   task={task}
-                  showDate
+                  showDate={true}
                   onToggle={() => toggleTask.mutate({ id: task.id, is_complete: true })}
                   onDelete={() => deleteTask.mutate(task.id)}
                 />
@@ -134,61 +136,61 @@ export function TaskSidebar({ events = [], onCollapse }: TaskSidebarProps) {
             </ul>
           )}
         </section>
-      </div>
 
-      {/* ── Add task form — pinned to bottom ── */}
-      <div className="flex-shrink-0 border-t border-sand-100 px-3 py-2.5">
-        <form onSubmit={handleAdd}>
-          <div className="flex items-center gap-2">
-            <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-terracotta-500">
-              <svg viewBox="0 0 12 12" fill="none" className="h-3 w-3 text-white">
-                <path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-            </div>
-            <input
-              type="text"
-              value={newTitle}
-              onChange={e => setNewTitle(e.target.value)}
-              placeholder="Add a task…"
-              className="flex-1 bg-transparent text-sm text-brown-800 placeholder:text-brown-700/35 focus:outline-none"
-            />
-          </div>
-
-          {newTitle.trim() && (
-            <div className="mt-2 flex gap-1.5">
-              <div className="relative flex-1">
-                <input
-                  type="date"
-                  value={newDue}
-                  onChange={e => setNewDue(e.target.value)}
-                  className="w-full rounded-lg border border-sand-200 bg-cream-50 px-2 py-1 text-xs text-brown-800 focus:border-terracotta-500 focus:outline-none [color-scheme:light]"
-                />
-                {!newDue && (
-                  <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-xs text-brown-700/35">
-                    Date
-                  </span>
-                )}
+        {/* Add task form at the bottom of the list */}
+        <div className="px-3 pb-6 pt-3 mt-3 border-t border-sand-100/50">
+          <form onSubmit={handleAdd} className="flex flex-col rounded-lg px-2 py-1.5 hover:bg-cream-100 focus-within:bg-cream-100 transition-colors">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-full border border-dashed border-brown-700/30 text-brown-700/40">
+                <svg viewBox="0 0 12 12" fill="none" className="h-2.5 w-2.5">
+                  <path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
               </div>
-              <select
-                value={newAssignee}
-                onChange={e => setNewAssignee(e.target.value)}
-                className="flex-1 rounded-lg border border-sand-200 bg-cream-50 px-2 py-1 text-xs text-brown-800 focus:border-terracotta-500 focus:outline-none"
-              >
-                <option value="">Anyone</option>
-                {members?.map(m => (
-                  <option key={m.id} value={m.id}>{m.display_name}</option>
-                ))}
-              </select>
-              <button
-                type="submit"
-                disabled={!newTitle.trim() || createTask.isPending}
-                className="rounded-lg bg-terracotta-500 px-3 py-1 text-xs font-semibold text-white hover:bg-terracotta-600 disabled:opacity-50 transition-colors"
-              >
-                {createTask.isPending ? '…' : 'Add'}
-              </button>
+              <input
+                type="text"
+                value={newTitle}
+                onChange={e => setNewTitle(e.target.value)}
+                placeholder="Add a task…"
+                className="flex-1 bg-transparent text-[15px] font-semibold text-brown-900 placeholder:text-brown-700/35 focus:outline-none"
+              />
             </div>
-          )}
-        </form>
+
+            {newTitle.trim() && (
+              <div className="mt-2.5 ml-[28px] flex gap-1.5">
+                <div className="relative flex-1">
+                  <input
+                    type="date"
+                    value={newDue}
+                    onChange={e => setNewDue(e.target.value)}
+                    className="w-full rounded-lg border border-sand-200 bg-cream-50 px-2 py-1 text-xs text-brown-800 focus:border-terracotta-500 focus:outline-none [color-scheme:light]"
+                  />
+                  {!newDue && (
+                    <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-xs text-brown-700/35">
+                      Date
+                    </span>
+                  )}
+                </div>
+                <select
+                  value={newAssignee}
+                  onChange={e => setNewAssignee(e.target.value)}
+                  className="flex-1 rounded-lg border border-sand-200 bg-cream-50 px-2 py-1 text-xs text-brown-800 focus:border-terracotta-500 focus:outline-none"
+                >
+                  <option value="">Anyone</option>
+                  {members?.map(m => (
+                    <option key={m.id} value={m.id}>{m.display_name}</option>
+                  ))}
+                </select>
+                <button
+                  type="submit"
+                  disabled={!newTitle.trim() || createTask.isPending}
+                  className="rounded-lg bg-terracotta-500 px-3 py-1 text-xs font-semibold text-white hover:bg-terracotta-600 disabled:opacity-50 transition-colors"
+                >
+                  {createTask.isPending ? '…' : 'Add'}
+                </button>
+              </div>
+            )}
+          </form>
+        </div>
       </div>
     </div>
   )
@@ -198,7 +200,7 @@ export function TaskSidebar({ events = [], onCollapse }: TaskSidebarProps) {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="px-4 pt-3.5 pb-1.5 font-display text-[11px] uppercase tracking-widest text-terracotta-500 select-none">
+    <h3 className="px-4 pt-4 pb-2 font-display text-[14px] font-semibold uppercase tracking-widest text-terracotta-500 select-none">
       {children}
     </h3>
   )
@@ -281,7 +283,7 @@ function TaskRow({
       </button>
 
       {/* Title */}
-      <span className="flex-1 min-w-0 truncate text-sm text-brown-900">
+      <span className="flex-1 min-w-0 truncate text-[15px] font-semibold text-brown-900">
         {task.title}
       </span>
 

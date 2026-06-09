@@ -4,6 +4,7 @@ import { useFamilyMember } from '@/features/auth/use-family-member'
 import { LoginPage } from '@/features/auth/login-page'
 import { FamilySetup } from '@/features/auth/family-setup'
 import { Dashboard } from '@/features/dashboard/dashboard'
+import { InstallPrompt } from '@/features/pwa/install-prompt'
 
 export default function App() {
   const { user, loading } = useAuth()
@@ -13,11 +14,19 @@ export default function App() {
   // the member query is actively fetching (not retrying with backoff).
   const { data: familyMember, isFetching: memberFetching } = useFamilyMember()
 
+  // Helper to wrap routes so the InstallPrompt is always available
+  const wrap = (children: React.ReactNode) => (
+    <>
+      <InstallPrompt />
+      {children}
+    </>
+  )
+
   // Only show the splash while:
   // 1. Auth state is still resolving from Supabase
   // 2. User is logged in and we're actively fetching their member record (first load)
   if (loading || (user && memberFetching && familyMember === undefined)) {
-    return (
+    return wrap(
       <div className="flex min-h-svh items-center justify-center bg-cream-100">
         <p className="font-handwritten text-2xl text-terracotta-500">Loading…</p>
       </div>
@@ -25,11 +34,11 @@ export default function App() {
   }
 
   if (!user) {
-    return <LoginPage />
+    return wrap(<LoginPage />)
   }
 
   if (!familyMember) {
-    return (
+    return wrap(
       <FamilySetup
         onComplete={() => {
           // Invalidate all family-related queries so they refetch fresh
@@ -40,5 +49,5 @@ export default function App() {
     )
   }
 
-  return <Dashboard />
+  return wrap(<Dashboard />)
 }

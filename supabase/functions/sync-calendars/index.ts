@@ -20,9 +20,11 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     )
 
-    // Parse optional body: { family_member_id?: string } to sync one member
+    // Parse optional body: { family_member_id?: string, timeMin?: string, timeMax?: string } to sync one member/range
     const body = req.method === "POST" ? await req.json().catch(() => ({})) : {}
     const targetMemberId: string | null = body.family_member_id ?? null
+    const customTimeMin: string | null = body.timeMin ?? null
+    const customTimeMax: string | null = body.timeMax ?? null
 
     // Get all google_tokens (or just one if targeted)
     const query = supabase.from("google_tokens").select(`
@@ -76,28 +78,46 @@ Deno.serve(async (req) => {
       const calList = await calListRes.json()
       const calendars: any[] = calList.items ?? []
 
+      // Fetch existing connected calendars for this member to preserve custom colors/visibility
+      const { data: existingCals } = await supabase
+        .from("connected_calendars")
+        .select("calendar_id, color, is_visible")
+        .eq("family_member_id", tok.family_member_id)
+
+      const existingCalMap = new Map(
+        existingCals?.map((c: any) => [c.calendar_id, c]) ?? []
+      )
+
       // Upsert each calendar into connected_calendars
       for (const cal of calendars) {
+        const existing = existingCalMap.get(cal.id) as any
+        const color = existing?.color ?? cal.backgroundColor ?? null
+        const is_visible = existing ? existing.is_visible : (cal.selected ?? true)
+
         await supabase.from("connected_calendars").upsert(
           {
             family_member_id: tok.family_member_id,
             provider: "google",
             calendar_id: cal.id,
             calendar_name: cal.summary,
-            color: cal.backgroundColor ?? null,
-            is_visible: cal.selected ?? true,
+            color,
+            is_visible,
             google_account_email: cal.id === "primary" ? cal.summary : null,
           },
           { onConflict: "family_member_id,calendar_id" }
         )
       }
 
-      // 2. Fetch events for visible calendars (next 5 weeks + 1 week back)
+      // 2. Fetch events for visible calendars (next 5 weeks + 1 week back, or custom range if provided)
       const now = new Date()
-      const timeMin = new Date(now)
-      timeMin.setDate(now.getDate() - 7)
-      const timeMax = new Date(now)
-      timeMax.setDate(now.getDate() + 35)
+      const timeMin = customTimeMin ? new Date(customTimeMin) : new Date(now)
+      if (!customTimeMin) {
+        timeMin.setDate(now.getDate() - 7)
+      }
+      const timeMax = customTimeMax ? new Date(customTimeMax) : new Date(now)
+      if (!customTimeMax) {
+        timeMax.setDate(now.getDate() + 35)
+      }
 
       let eventsCount = 0
 

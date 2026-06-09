@@ -59,12 +59,21 @@ export function useCreateEvent() {
       event: EventWrite
       calendarId: string
       familyMemberId: string
-    }) => invokeWriteEvent({
-      action: 'create',
-      family_member_id: familyMemberId,
-      calendar_id: calendarId,
-      event,
-    }),
+    }) => {
+      const result = await invokeWriteEvent({
+        action: 'create',
+        family_member_id: familyMemberId,
+        calendar_id: calendarId,
+        event,
+      })
+      // Trigger background sync
+      const { data: { session } } = await supabase.auth.getSession()
+      supabase.functions.invoke('sync-calendars', {
+        body: { family_member_id: familyMemberId },
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
+      }).catch(console.error)
+      return result
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['calendar-events', member?.family_id] })
     },
@@ -84,12 +93,21 @@ export function useUpdateEvent() {
       event: EventWrite
       calendarId: string
       familyMemberId: string
-    }) => invokeWriteEvent({
-      action: 'update',
-      family_member_id: familyMemberId,
-      calendar_id: calendarId,
-      event,
-    }),
+    }) => {
+      const result = await invokeWriteEvent({
+        action: 'update',
+        family_member_id: familyMemberId,
+        calendar_id: calendarId,
+        event,
+      })
+      // Trigger background sync
+      const { data: { session } } = await supabase.auth.getSession()
+      supabase.functions.invoke('sync-calendars', {
+        body: { family_member_id: familyMemberId },
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
+      }).catch(console.error)
+      return result
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['calendar-events', member?.family_id] })
     },
@@ -109,12 +127,30 @@ export function useDeleteEvent() {
       eventId: string
       calendarId: string
       familyMemberId: string
-    }) => invokeWriteEvent({
-      action: 'delete',
-      family_member_id: familyMemberId,
-      calendar_id: calendarId,
-      event: { id: eventId, title: '', start: '', end: '', all_day: false },
-    }),
+    }) => {
+      const deletePromise = invokeWriteEvent({
+        action: 'delete',
+        family_member_id: familyMemberId,
+        calendar_id: calendarId,
+        event: { id: eventId, title: '', start: '', end: '', all_day: false },
+      })
+      
+      const localDeletePromise = supabase
+        .from('calendar_events')
+        .delete()
+        .eq('external_event_id', eventId)
+
+      const [result] = await Promise.all([deletePromise, localDeletePromise])
+
+      // Trigger background sync
+      const { data: { session } } = await supabase.auth.getSession()
+      supabase.functions.invoke('sync-calendars', {
+        body: { family_member_id: familyMemberId },
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
+      }).catch(console.error)
+
+      return result
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['calendar-events', member?.family_id] })
     },
