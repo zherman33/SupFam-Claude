@@ -20,14 +20,15 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     )
 
-    // Parse optional body: { family_member_id?: string, timeMin?: string, timeMax?: string } to sync one member/range
+    // Parse optional body: { family_member_id?: string, family_id?: string, timeMin?: string, timeMax?: string } to sync one member/range
     const body = req.method === "POST" ? await req.json().catch(() => ({})) : {}
     const targetMemberId: string | null = body.family_member_id ?? null
+    const targetFamilyId: string | null = body.family_id ?? null
     const customTimeMin: string | null = body.timeMin ?? null
     const customTimeMax: string | null = body.timeMax ?? null
 
     // Get all google_tokens (or just one if targeted)
-    const query = supabase.from("google_tokens").select(`
+    let query = supabase.from("google_tokens").select(`
       id,
       family_member_id,
       access_token,
@@ -35,7 +36,12 @@ Deno.serve(async (req) => {
       token_expires_at,
       family_members!inner(id, display_name, avatar_color, family_id)
     `)
-    if (targetMemberId) query.eq("family_member_id", targetMemberId)
+    if (targetMemberId) {
+      query = query.eq("family_member_id", targetMemberId)
+    }
+    if (targetFamilyId) {
+      query = query.eq("family_members.family_id", targetFamilyId)
+    }
     const { data: tokens, error: tokErr } = await query
 
     if (tokErr) throw tokErr
@@ -50,166 +56,171 @@ Deno.serve(async (req) => {
         ? tok.family_members[0]
         : tok.family_members as any
 
-      let accessToken = tok.access_token
+      try {
+        let accessToken = tok.access_token
 
-      // Refresh token if expired or expiring within 5 minutes
-      if (tok.token_expires_at) {
-        const expiresAt = new Date(tok.token_expires_at).getTime()
-        if (expiresAt < Date.now() + 5 * 60 * 1000 && tok.refresh_token) {
-          accessToken = await refreshAccessToken(
-            tok.refresh_token,
-            tok.family_member_id,
-            supabase
-          )
+        // Refresh token if expired or expiring within 5 minutes
+        if (tok.token_expires_at) {
+          const expiresAt = new Date(tok.token_expires_at).getTime()
+          if (expiresAt < Date.now() + 5 * 60 * 1000 && tok.refresh_token) {
+            accessToken = await refreshAccessToken(
+              tok.refresh_token,
+              tok.family_member_id,
+              supabase
+            )
+          }
         }
-      }
 
-      // 1. Fetch calendar list
-      const calListRes = await fetch(
-        `${GOOGLE_CALENDAR_BASE}/users/me/calendarList?maxResults=50`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      )
-
-      if (!calListRes.ok) {
-        results.push({ member: member.display_name, error: `calendarList ${calListRes.status}` })
-        continue
-      }
-
-      const calList = await calListRes.json()
-      const calendars: any[] = calList.items ?? []
-
-      // Fetch existing connected calendars for this member to preserve custom colors/visibility
-      const { data: existingCals } = await supabase
-        .from("connected_calendars")
-        .select("calendar_id, color, is_visible")
-        .eq("family_member_id", tok.family_member_id)
-
-      const existingCalMap = new Map(
-        existingCals?.map((c: any) => [c.calendar_id, c]) ?? []
-      )
-
-      // Upsert each calendar into connected_calendars
-      for (const cal of calendars) {
-        const existing = existingCalMap.get(cal.id) as any
-        const color = existing?.color ?? cal.backgroundColor ?? null
-        const is_visible = existing ? existing.is_visible : (cal.selected ?? true)
-
-        await supabase.from("connected_calendars").upsert(
-          {
-            family_member_id: tok.family_member_id,
-            provider: "google",
-            calendar_id: cal.id,
-            calendar_name: cal.summary,
-            color,
-            is_visible,
-            google_account_email: cal.id === "primary" ? cal.summary : null,
-          },
-          { onConflict: "family_member_id,calendar_id" }
-        )
-      }
-
-      // 2. Fetch events for visible calendars (next 5 weeks + 1 week back, or custom range if provided)
-      const now = new Date()
-      const timeMin = customTimeMin ? new Date(customTimeMin) : new Date(now)
-      if (!customTimeMin) {
-        timeMin.setDate(now.getDate() - 7)
-      }
-      const timeMax = customTimeMax ? new Date(customTimeMax) : new Date(now)
-      if (!customTimeMax) {
-        timeMax.setDate(now.getDate() + 35)
-      }
-
-      let eventsCount = 0
-
-      for (const cal of calendars) {
-        // Skip declined, hidden, or junk calendars
-        if (cal.accessRole === "freeBusyReader") continue
-
-        const eventsRes = await fetch(
-          `${GOOGLE_CALENDAR_BASE}/calendars/${encodeURIComponent(cal.id)}/events?` +
-            new URLSearchParams({
-              timeMin: timeMin.toISOString(),
-              timeMax: timeMax.toISOString(),
-              singleEvents: "true",
-              orderBy: "startTime",
-              maxResults: "500",
-            }),
+        // 1. Fetch calendar list
+        const calListRes = await fetch(
+          `${GOOGLE_CALENDAR_BASE}/users/me/calendarList?maxResults=50`,
           { headers: { Authorization: `Bearer ${accessToken}` } }
         )
 
-        if (!eventsRes.ok) continue
+        if (!calListRes.ok) {
+          results.push({ member: member.display_name, error: `calendarList ${calListRes.status}` })
+          continue
+        }
 
-        const eventsData = await eventsRes.json()
-        const events: any[] = eventsData.items ?? []
+        const calList = await calListRes.json()
+        const calendars: any[] = calList.items ?? []
 
-        // Upsert events into calendar_events
-        const fetchedIds: string[] = []
-        for (const ev of events) {
-          if (ev.status === "cancelled") continue
+        // Fetch existing connected calendars for this member to preserve custom colors/visibility
+        const { data: existingCals } = await supabase
+          .from("connected_calendars")
+          .select("calendar_id, color, is_visible")
+          .eq("family_member_id", tok.family_member_id)
 
-          const startAt = ev.start?.dateTime ?? ev.start?.date
-          const endAt = ev.end?.dateTime ?? ev.end?.date
-          if (!startAt) continue
+        const existingCalMap = new Map(
+          existingCals?.map((c: any) => [c.calendar_id, c]) ?? []
+        )
 
-          const allDay = !ev.start?.dateTime
+        // Upsert each calendar into connected_calendars
+        for (const cal of calendars) {
+          const existing = existingCalMap.get(cal.id) as any
+          const color = existing?.color ?? cal.backgroundColor ?? null
+          const is_visible = existing ? existing.is_visible : (cal.selected ?? true)
 
-          await supabase.from("calendar_events").upsert(
+          await supabase.from("connected_calendars").upsert(
             {
-              family_id: member.family_id,
-              source_calendar_id: cal.id,
-              external_event_id: ev.id,
-              title: ev.summary ?? "(No title)",
-              description: ev.description ?? null,
-              location: ev.location ?? null,
-              start_at: allDay ? `${startAt}T00:00:00Z` : startAt,
-              end_at: endAt
-                ? allDay
-                  ? `${endAt}T00:00:00Z`
-                  : endAt
-                : null,
-              all_day: allDay,
-              color: cal.backgroundColor ?? null,
-              created_by: tok.family_member_id,
+              family_member_id: tok.family_member_id,
+              provider: "google",
+              calendar_id: cal.id,
+              calendar_name: cal.summary,
+              color,
+              is_visible,
+              google_account_email: cal.id === "primary" ? cal.summary : null,
             },
-            { onConflict: "family_id,external_event_id" }
+            { onConflict: "family_member_id,calendar_id" }
+          )
+        }
+
+        // 2. Fetch events for visible calendars (next 5 weeks + 1 week back, or custom range if provided)
+        const now = new Date()
+        const timeMin = customTimeMin ? new Date(customTimeMin) : new Date(now)
+        if (!customTimeMin) {
+          timeMin.setDate(now.getDate() - 7)
+        }
+        const timeMax = customTimeMax ? new Date(customTimeMax) : new Date(now)
+        if (!customTimeMax) {
+          timeMax.setDate(now.getDate() + 35)
+        }
+
+        let eventsCount = 0
+
+        for (const cal of calendars) {
+          // Skip declined, hidden, or junk calendars
+          if (cal.accessRole === "freeBusyReader") continue
+
+          const eventsRes = await fetch(
+            `${GOOGLE_CALENDAR_BASE}/calendars/${encodeURIComponent(cal.id)}/events?` +
+              new URLSearchParams({
+                timeMin: timeMin.toISOString(),
+                timeMax: timeMax.toISOString(),
+                singleEvents: "true",
+                orderBy: "startTime",
+                maxResults: "500",
+              }),
+            { headers: { Authorization: `Bearer ${accessToken}` } }
           )
 
-          fetchedIds.push(ev.id)
-          eventsCount++
+          if (!eventsRes.ok) continue
+
+          const eventsData = await eventsRes.json()
+          const events: any[] = eventsData.items ?? []
+
+          // Upsert events into calendar_events
+          const fetchedIds: string[] = []
+          for (const ev of events) {
+            if (ev.status === "cancelled") continue
+
+            const startAt = ev.start?.dateTime ?? ev.start?.date
+            const endAt = ev.end?.dateTime ?? ev.end?.date
+            if (!startAt) continue
+
+            const allDay = !ev.start?.dateTime
+
+            await supabase.from("calendar_events").upsert(
+              {
+                family_id: member.family_id,
+                source_calendar_id: cal.id,
+                external_event_id: ev.id,
+                title: ev.summary ?? "(No title)",
+                description: ev.description ?? null,
+                location: ev.location ?? null,
+                start_at: allDay ? `${startAt}T00:00:00Z` : startAt,
+                end_at: endAt
+                  ? allDay
+                    ? `${endAt}T00:00:00Z`
+                    : endAt
+                  : null,
+                all_day: allDay,
+                color: cal.backgroundColor ?? null,
+                created_by: tok.family_member_id,
+              },
+              { onConflict: "family_id,external_event_id" }
+            )
+
+            fetchedIds.push(ev.id)
+            eventsCount++
+          }
+
+          // Delete events that were removed from Google Calendar.
+          // Query the DB for all events for this calendar in the sync window,
+          // then delete any whose external_event_id is no longer in Google's response.
+          const { data: dbEvents } = await supabase
+            .from("calendar_events")
+            .select("id, external_event_id")
+            .eq("family_id", member.family_id)
+            .eq("source_calendar_id", cal.id)
+            .gte("start_at", timeMin.toISOString())
+            .lte("start_at", timeMax.toISOString())
+            .not("external_event_id", "is", null)
+
+          const toDelete = (dbEvents ?? [])
+            .filter((e: any) => e.external_event_id && !fetchedIds.includes(e.external_event_id))
+            .map((e: any) => e.id)
+
+          if (toDelete.length > 0) {
+            await supabase.from("calendar_events").delete().in("id", toDelete)
+          }
         }
 
-        // Delete events that were removed from Google Calendar.
-        // Query the DB for all events for this calendar in the sync window,
-        // then delete any whose external_event_id is no longer in Google's response.
-        const { data: dbEvents } = await supabase
-          .from("calendar_events")
-          .select("id, external_event_id")
-          .eq("family_id", member.family_id)
-          .eq("source_calendar_id", cal.id)
-          .gte("start_at", timeMin.toISOString())
-          .lte("start_at", timeMax.toISOString())
-          .not("external_event_id", "is", null)
+        // Update last_synced_at
+        await supabase
+          .from("connected_calendars")
+          .update({ last_synced_at: new Date().toISOString() })
+          .eq("family_member_id", tok.family_member_id)
 
-        const toDelete = (dbEvents ?? [])
-          .filter((e: any) => e.external_event_id && !fetchedIds.includes(e.external_event_id))
-          .map((e: any) => e.id)
-
-        if (toDelete.length > 0) {
-          await supabase.from("calendar_events").delete().in("id", toDelete)
-        }
+        results.push({
+          member: member.display_name,
+          calendars: calendars.length,
+          events: eventsCount,
+        })
+      } catch (err) {
+        console.error(`Error syncing token for member ${member.id}:`, err)
+        results.push({ member: member.display_name, error: String(err) })
       }
-
-      // Update last_synced_at
-      await supabase
-        .from("connected_calendars")
-        .update({ last_synced_at: new Date().toISOString() })
-        .eq("family_member_id", tok.family_member_id)
-
-      results.push({
-        member: member.display_name,
-        calendars: calendars.length,
-        events: eventsCount,
-      })
     }
 
     return jsonResp({ synced: results.length, results })

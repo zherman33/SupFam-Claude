@@ -141,13 +141,21 @@ export function CalendarView({
   }, [topWeekIdx, allWeeks, onSyncRange, today])
 
   const handleManualRefresh = () => {
-    const start = new Date(today)
-    start.setDate(today.getDate() - 7)
-    const end = new Date(today)
-    end.setDate(today.getDate() + 35)
+    const currentWeek = allWeeks[topWeekIdx]
+    const weekStart = currentWeek ? currentWeek[0] : today
+    
+    const start = new Date(weekStart)
+    start.setDate(weekStart.getDate() - 7)
+    const end = new Date(weekStart)
+    end.setDate(weekStart.getDate() + 35)
+    
     syncedRangesRef.current = [{ start, end }]
     
-    if (onRefresh) onRefresh()
+    if (onSyncRange) {
+      onSyncRange(start, end)
+    } else if (onRefresh) {
+      onRefresh()
+    }
   }
 
   // Scroll to today's week on mount / mode change / today change

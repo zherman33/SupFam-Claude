@@ -170,7 +170,7 @@ export function useSyncCalendars() {
     mutationFn: async (variables: { timeMin?: string; timeMax?: string } | void) => {
       const { data: { session } } = await supabase.auth.getSession()
       const res = await supabase.functions.invoke('sync-calendars', {
-        body: variables || {},
+        body: { ...variables, family_id: member?.family_id },
         headers: session?.access_token
           ? { Authorization: `Bearer ${session.access_token}` }
           : {},
