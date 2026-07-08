@@ -9,7 +9,8 @@ import { TaskBar } from '@/features/tasks/task-bar'
 import { TaskSidebar } from '@/features/tasks/task-sidebar'
 import { GroceryPanel } from '@/features/grocery/grocery-panel'
 import { NotesPanel } from '@/features/notes/notes-panel'
-import { useTasks, useSyncTasks } from '@/features/tasks/use-tasks'
+import { useTasks, useSyncTasks, type Task } from '@/features/tasks/use-tasks'
+import { TaskForm } from '@/features/tasks/task-form'
 import { useCalendarEvents, useSyncCalendars } from '@/features/calendar/use-calendar'
 
 type Drawer = 'grocery' | 'notes' | null
@@ -28,13 +29,14 @@ export function Dashboard() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [calPickerOpen, setCalPickerOpen] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
   const familyName = member?.families?.name ?? 'Your Family'
   const inviteCode = member?.families?.invite_code
 
-  // Auto-sync on mount and whenever the app comes back into view
-  // (covers PWA waking from background on iPad/iPhone)
+  // Auto-sync on mount, whenever the app comes back into view, and periodically every 30s while visible
+  // (ensures voice-added events/tasks from Google Assistant on the Apollo display appear automatically)
   useEffect(() => {
     if (!member?.id) return
     syncCalendars.mutate()
@@ -48,7 +50,18 @@ export function Dashboard() {
       }
     }
     document.addEventListener('visibilitychange', handleVisibility)
-    return () => document.removeEventListener('visibilitychange', handleVisibility)
+
+    const intervalId = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        syncCalendars.mutate()
+        syncTasks.mutate()
+      }
+    }, 30000)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+      clearInterval(intervalId)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [member?.id])
 
@@ -81,7 +94,7 @@ export function Dashboard() {
               <span className="text-xs font-semibold text-brown-700/60 uppercase tracking-widest">
                 {familyName}
               </span>
-              {syncCalendars.isPending && (
+              {(syncCalendars.isPending || syncTasks.isPending) && (
                 <span className="flex items-center gap-1 text-[11px] text-brown-700/40">
                   <svg className="h-3 w-3 animate-spin" viewBox="0 0 14 14" fill="none">
                     <path d="M12 7A5 5 0 1 1 7 2M12 2v4H8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -224,12 +237,12 @@ export function Dashboard() {
       )}
 
       {/* ── Main: task sidebar + calendar + optional right drawer ── */}
-      <div className="flex flex-1 min-h-0 gap-3 p-3 pb-0">
+      <div className="flex flex-1 min-h-0 gap-3 px-3 pt-safe pb-0">
 
         {/* Task sidebar — shown only when expanded */}
         {sidebarExpanded && (
           <div className="w-72 flex-shrink-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-sand-200/60">
-            <TaskSidebar events={events} onCollapse={() => setSidebarExpanded(false)} />
+            <TaskSidebar events={events} onCollapse={() => setSidebarExpanded(false)} onSelectTask={setEditingTask} />
           </div>
         )}
 
@@ -240,8 +253,9 @@ export function Dashboard() {
             mode={mode}
             onModeChange={setMode}
             headerRight={dotsMenu}
-            onRefresh={() => syncCalendars.mutate()}
-            isRefreshing={syncCalendars.isPending}
+            onRefresh={() => { syncCalendars.mutate(); syncTasks.mutate(); }}
+            isRefreshing={syncCalendars.isPending || syncTasks.isPending}
+            onSelectTask={setEditingTask}
           />
         </div>
 
@@ -281,8 +295,12 @@ export function Dashboard() {
       {/* ── Task bar — only when sidebar is collapsed ── */}
       {!sidebarExpanded && (
         <div className="mx-3 my-3 flex-shrink-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-sand-200/60">
-          <TaskBar onExpand={() => setSidebarExpanded(true)} />
+          <TaskBar onExpand={() => setSidebarExpanded(true)} onSelectTask={setEditingTask} />
         </div>
+      )}
+
+      {editingTask && (
+        <TaskForm task={editingTask} onClose={() => setEditingTask(null)} />
       )}
     </div>
   )

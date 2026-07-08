@@ -36,8 +36,8 @@ Dual-parent households with young children. Busy professionals in the Apple ecos
 | Auth provider | Supabase Auth with Google OAuth |
 | Deployment | Vercel (frontend only — no separate backend server) |
 | Package manager | pnpm |
-| Version control | GitHub + GitHub Desktop (GUI only) |
-| Build tool | Claude Code |
+| Version control | GitHub + Git / GitHub CLI (AI assistant handles version control and PRs via terminal) |
+| Build tool | Claude Code / Antigravity |
 
 **Key architecture decision:** There is NO separate backend server. The frontend talks directly to Supabase. Auth is Supabase Auth (not custom session auth). Calendar API calls that need server-side secrets use Supabase Edge Functions.
 
@@ -280,8 +280,8 @@ These go in `.env.local` for development and in Vercel's environment variables f
 
 - **Vercel** auto-deploys from `main` branch on GitHub
 - Frontend only — no server to deploy
-- Supabase Edge Functions deploy via Supabase CLI (if/when needed for token refresh)
-- After pushing changes via GitHub Desktop, Vercel rebuilds automatically
+- Supabase Edge Functions & migrations deploy via Supabase CLI (`npx supabase`)
+- The AI assistant is authorized and expected to handle all Git commits, branch pushes, PR merges, and Supabase CLI commands via the terminal to manage deployments and database updates automatically.
 
 ---
 
@@ -299,7 +299,7 @@ These go in `.env.local` for development and in Vercel's environment variables f
 
 ## Important Constraints
 
-- **No terminal for git.** All version control via GitHub Desktop. Never instruct the user to run git commands.
+- **AI terminal automation for Git & Supabase.** The AI assistant is authorized to execute git commands, GitHub CLI (`gh`), and Supabase CLI commands via the terminal on behalf of the user to handle version control, PRs, database migrations, and deployments.
 - **No separate backend server.** Everything goes through Supabase.
 - **No dark mode.** The app is always warm cream.
 - **iPad landscape is the primary design target.** Don't optimize for mobile first.

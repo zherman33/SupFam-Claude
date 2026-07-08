@@ -6,6 +6,8 @@ import {
   useDeleteEventColorRule,
   type EventColorRule,
 } from './use-event-color-rules'
+import { useConnectedCalendars, useUpdateCalendarColor, useDeleteConnectedCalendar, useToggleQuickToggle, type ConnectedCalendar } from '@/features/calendar/use-calendar'
+import { AddCalendarModal } from '@/features/calendar/add-calendar-modal'
 
 const PRESET_COLORS = [
   { label: 'Pink', value: '#E91E8C' },
@@ -49,9 +51,209 @@ export function AdvancedSettings({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto divide-y divide-sand-100">
+          <ConnectedCalendarColorsSection />
           <EventColorRulesSection />
         </div>
+      </div>
+    </div>
+  )
+}
+
+function ConnectedCalendarColorsSection() {
+  const { data: calendars, isLoading } = useConnectedCalendars()
+  const updateColor = useUpdateCalendarColor()
+  const [addModalOpen, setAddModalOpen] = useState(false)
+
+  // Group by owner
+  const byOwner = new Map<string, ConnectedCalendar[]>()
+  for (const cal of calendars ?? []) {
+    const ownerName = cal.owner?.display_name ?? 'Unknown'
+    if (!byOwner.has(ownerName)) byOwner.set(ownerName, [])
+    byOwner.get(ownerName)!.push(cal)
+  }
+
+  return (
+    <div className="p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <p className="text-sm font-semibold text-brown-800">Connected calendars</p>
+          <p className="text-xs text-brown-700/50 mt-0.5">
+            Customize the default color for each calendar connected to the app
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setAddModalOpen(true)}
+          className="flex items-center gap-1 rounded-lg bg-terracotta-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-terracotta-600"
+        >
+          <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
+            <path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+          Add calendar
+        </button>
+      </div>
+
+      {isLoading && (
+        <div className="space-y-2">
+          {[1, 2].map(i => (
+            <div key={i} className="h-12 animate-pulse rounded-xl bg-sand-100" />
+          ))}
+        </div>
+      )}
+
+      {!isLoading && (!calendars || calendars.length === 0) && (
+        <p className="text-xs text-brown-700/40">No connected calendars found.</p>
+      )}
+
+      <div className="space-y-4">
+        {Array.from(byOwner.entries()).map(([ownerName, cals]) => (
+          <div key={ownerName} className="space-y-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-brown-700/40 px-1">
+              {ownerName}
+            </p>
+            <div className="space-y-1">
+              {cals.map(cal => (
+                <ConnectedCalendarRow
+                  key={cal.id}
+                  calendar={cal}
+                  onUpdate={(color) => updateColor.mutate({ id: cal.id, color, calendar_id: cal.calendar_id })}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {addModalOpen && <AddCalendarModal onClose={() => setAddModalOpen(false)} />}
+    </div>
+  )
+}
+
+function ConnectedCalendarRow({
+  calendar,
+  onUpdate,
+}: {
+  calendar: ConnectedCalendar
+  onUpdate: (color: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [color, setColor] = useState(calendar.color ?? '#C4714F')
+  const deleteCal = useDeleteConnectedCalendar()
+  const toggleQuick = useToggleQuickToggle()
+
+  if (editing) {
+    return (
+      <div className="rounded-xl border border-sand-200 bg-cream-50 p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-brown-800">{calendar.calendar_name ?? calendar.calendar_id}</span>
+          <span className="text-[10px] text-brown-700/40 uppercase tracking-wider font-semibold">Pick color</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {PRESET_COLORS.map(c => (
+            <button
+              key={c.value}
+              type="button"
+              onClick={() => setColor(c.value)}
+              title={c.label}
+              className="h-6 w-6 rounded-md flex items-center justify-center transition-transform hover:scale-110"
+              style={{ backgroundColor: c.value }}
+            >
+              {color.toLowerCase() === c.value.toLowerCase() && (
+                <svg className="h-3 w-3 text-white" viewBox="0 0 12 12" fill="none">
+                  <path d="M2 6l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+            </button>
+          ))}
+          <label className="h-6 w-6 rounded-md border border-dashed border-sand-300 cursor-pointer flex items-center justify-center bg-white" title="Custom hex color">
+            <input type="color" value={color} onChange={e => setColor(e.target.value)} className="sr-only"/>
+            <span className="text-xs text-brown-700/50 font-bold">+</span>
+          </label>
+        </div>
+        <div className="flex gap-2 pt-1">
+          <button
+            type="button"
+            onClick={() => { onUpdate(color); setEditing(false) }}
+            className="flex-1 rounded-lg bg-brown-800 py-1.5 text-xs font-semibold text-cream-50 hover:bg-brown-900 transition-colors"
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={() => { setColor(calendar.color ?? '#C4714F'); setEditing(false) }}
+            className="rounded-lg border border-sand-300 px-3 py-1.5 text-xs text-brown-700 hover:bg-cream-100 transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-sand-100 bg-white px-3 py-2.5 group">
+      {/* Color swatch */}
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        title="Change calendar color"
+        className="h-7 w-7 flex-shrink-0 rounded-lg transition-transform hover:scale-110 shadow-sm ring-1 ring-black/5"
+        style={{ backgroundColor: calendar.color ?? '#C4714F' }}
+      />
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm font-semibold text-brown-800 truncate">{calendar.calendar_name ?? calendar.calendar_id}</span>
+          {calendar.is_default && (
+            <span className="text-[10px] bg-sand-100 text-brown-700/60 font-semibold rounded px-1.5 py-0.5">Default</span>
+          )}
+        </div>
+        <p className="text-xs text-brown-700/40 truncate">{calendar.provider} calendar</p>
+      </div>
+
+      {/* Edit/Delete actions */}
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => toggleQuick.mutate({ id: calendar.id, is_quick_toggle: !calendar.is_quick_toggle })}
+          title={calendar.is_quick_toggle ? "Remove quick toggle button from home screen" : "Add quick toggle button to home screen"}
+          className={`text-xs font-semibold px-2 py-1 rounded-lg transition-colors flex items-center gap-1 ${
+            calendar.is_quick_toggle
+              ? 'bg-terracotta-50 text-terracotta-600 hover:bg-terracotta-100'
+              : 'text-brown-700/40 hover:bg-sand-100 hover:text-brown-700'
+          }`}
+        >
+          <svg className="h-3 w-3" viewBox="0 0 16 16" fill={calendar.is_quick_toggle ? "currentColor" : "none"}>
+            <path d="M9 2L3 9H8L7 14L13 7H8L9 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          {calendar.is_quick_toggle ? 'Quick toggle on' : 'Add quick toggle'}
+        </button>
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="text-xs font-semibold text-brown-700/40 group-hover:text-terracotta-500 transition-colors px-2 py-1 rounded-lg hover:bg-sand-100"
+        >
+          Edit color
+        </button>
+        {calendar.ics_url && (
+          <button
+            type="button"
+            title="Remove calendar subscription"
+            onClick={(e) => {
+              e.preventDefault()
+              if (confirm(`Remove "${calendar.calendar_name ?? 'this calendar'}" subscription? This will delete all its synced events.`)) {
+                deleteCal.mutate({ id: calendar.id, calendar_id: calendar.calendar_id })
+              }
+            }}
+            className="rounded p-1.5 text-brown-700/30 hover:bg-red-50 hover:text-red-500 transition-colors"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
+              <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5l.5-9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        )}
       </div>
     </div>
   )

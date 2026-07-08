@@ -1,24 +1,38 @@
 import { useState } from 'react'
 import { format, isPast, isToday, parseISO } from 'date-fns'
 import type { CalendarEvent } from '@/features/calendar/use-calendar'
-import { useTasks, useCreateTask, useToggleTask, useDeleteTask, type Task } from './use-tasks'
-import { useFamilyMembers } from '@/features/auth/use-family-member'
+import { useTasks, useCreateTask, useToggleTask, useDeleteTask, useReorderTasks, sortUnscheduledTasks, type Task } from './use-tasks'
+import { UnscheduledTaskList } from './unscheduled-task-list'
+import { TaskForm } from './task-form'
+import { useFamilyMember, useFamilyMembers } from '@/features/auth/use-family-member'
 
 interface TaskSidebarProps {
   events?: CalendarEvent[]
   onCollapse?: () => void
+  onSelectTask?: (task: Task) => void
 }
 
-export function TaskSidebar({ events = [], onCollapse }: TaskSidebarProps) {
+export function TaskSidebar({ events = [], onCollapse, onSelectTask }: TaskSidebarProps) {
   const { data: tasks } = useTasks()
+  const { data: member } = useFamilyMember()
   const { data: members } = useFamilyMembers()
   const createTask = useCreateTask()
   const toggleTask = useToggleTask()
   const deleteTask = useDeleteTask()
+  const reorderTasks = useReorderTasks()
 
   const [newTitle, setNewTitle] = useState('')
   const [newDue, setNewDue] = useState('')
   const [newAssignee, setNewAssignee] = useState('')
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
+
+  const handleSelectTask = (task: Task) => {
+    if (onSelectTask) {
+      onSelectTask(task)
+    } else {
+      setEditingTask(task)
+    }
+  }
 
   // ── Today's events ──────────────────────────────────────────────────────
   const todayStr = format(new Date(), 'yyyy-MM-dd')
@@ -37,7 +51,7 @@ export function TaskSidebar({ events = [], onCollapse }: TaskSidebarProps) {
 
   // ── Tasks split into unscheduled / scheduled ─────────────────────────────
   const incomplete = (tasks ?? []).filter(t => !t.is_complete)
-  const unscheduled = incomplete.filter(t => !t.due_date)
+  const unscheduled = sortUnscheduledTasks(incomplete.filter(t => !t.due_date), member?.family_id)
   const scheduled = incomplete
     .filter(t => !!t.due_date)
     .sort((a, b) => a.due_date!.localeCompare(b.due_date!))
@@ -100,16 +114,14 @@ export function TaskSidebar({ events = [], onCollapse }: TaskSidebarProps) {
           {unscheduled.length === 0 ? (
             <EmptyHint>Nothing floating</EmptyHint>
           ) : (
-            <ul className="px-3 pb-3 space-y-px">
-              {unscheduled.map(task => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  onToggle={() => toggleTask.mutate({ id: task.id, is_complete: true })}
-                  onDelete={() => deleteTask.mutate(task.id)}
-                />
-              ))}
-            </ul>
+            <UnscheduledTaskList
+              tasks={unscheduled}
+              variant="sidebar"
+              onToggle={(task) => toggleTask.mutate({ id: task.id, is_complete: true })}
+              onDelete={(task) => deleteTask.mutate(task.id)}
+              onSelect={(task) => handleSelectTask(task)}
+              onReorder={(orderedIds) => reorderTasks.mutate(orderedIds)}
+            />
           )}
         </section>
 
@@ -129,6 +141,7 @@ export function TaskSidebar({ events = [], onCollapse }: TaskSidebarProps) {
                   showDate
                   onToggle={() => toggleTask.mutate({ id: task.id, is_complete: true })}
                   onDelete={() => deleteTask.mutate(task.id)}
+                  onSelect={() => handleSelectTask(task)}
                 />
               ))}
             </ul>
@@ -190,6 +203,10 @@ export function TaskSidebar({ events = [], onCollapse }: TaskSidebarProps) {
           )}
         </form>
       </div>
+
+      {editingTask && (
+        <TaskForm task={editingTask} onClose={() => setEditingTask(null)} />
+      )}
     </div>
   )
 }
@@ -244,11 +261,13 @@ function TaskRow({
   showDate = false,
   onToggle,
   onDelete,
+  onSelect,
 }: {
   task: Task
   showDate?: boolean
   onToggle: () => void
   onDelete: () => void
+  onSelect?: () => void
 }) {
   const color = task.assigned_member?.avatar_color ?? '#C4714F'
   const isOverdue =
@@ -257,10 +276,18 @@ function TaskRow({
     !isToday(parseISO(task.due_date))
 
   return (
-    <li className="group flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-cream-100 transition-colors">
+    <li
+      onClick={onSelect}
+      className={`group flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors ${
+        onSelect ? 'cursor-pointer hover:bg-cream-100' : 'hover:bg-cream-100'
+      }`}
+    >
       {/* Complete button */}
       <button
-        onClick={onToggle}
+        onClick={(e) => {
+          e.stopPropagation()
+          onToggle()
+        }}
         className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors hover:bg-terracotta-500/10"
         style={{ borderColor: `${color}70` }}
         title="Mark complete"
@@ -299,7 +326,10 @@ function TaskRow({
 
       {/* Delete — reveals on row hover */}
       <button
-        onClick={onDelete}
+        onClick={(e) => {
+          e.stopPropagation()
+          onDelete()
+        }}
         className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full text-brown-700/25 opacity-0 group-hover:opacity-100 hover:text-brown-700/60 transition-all"
         title="Delete"
       >

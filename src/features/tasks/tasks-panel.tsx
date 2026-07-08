@@ -1,21 +1,38 @@
 import { useState } from 'react'
 import { format, isPast, isToday, parseISO } from 'date-fns'
-import { useTasks, useCreateTask, useToggleTask, useDeleteTask } from './use-tasks'
-import { useFamilyMembers } from '@/features/auth/use-family-member'
+import { useTasks, useCreateTask, useToggleTask, useDeleteTask, useReorderTasks, sortUnscheduledTasks, type Task } from './use-tasks'
+import { UnscheduledTaskList } from './unscheduled-task-list'
+import { TaskForm } from './task-form'
+import { useFamilyMember, useFamilyMembers } from '@/features/auth/use-family-member'
 
-export function TasksPanel() {
+export function TasksPanel({ onSelectTask }: { onSelectTask?: (task: Task) => void }) {
   const { data: tasks, isLoading } = useTasks()
+  const { data: member } = useFamilyMember()
   const { data: members } = useFamilyMembers()
   const createTask = useCreateTask()
   const toggleTask = useToggleTask()
   const deleteTask = useDeleteTask()
+  const reorderTasks = useReorderTasks()
 
   const [newTitle, setNewTitle] = useState('')
   const [newDue, setNewDue] = useState('')
   const [newAssignee, setNewAssignee] = useState('')
   const [showForm, setShowForm] = useState(false)
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
+
+  const handleSelectTask = (task: Task) => {
+    if (onSelectTask) {
+      onSelectTask(task)
+    } else {
+      setEditingTask(task)
+    }
+  }
 
   const incomplete = tasks?.filter((t) => !t.is_complete) ?? []
+  const unscheduled = sortUnscheduledTasks(incomplete.filter((t) => !t.due_date), member?.family_id)
+  const scheduled = incomplete
+    .filter((t) => !!t.due_date)
+    .sort((a, b) => a.due_date!.localeCompare(b.due_date!))
   const complete = tasks?.filter((t) => t.is_complete) ?? []
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -116,18 +133,46 @@ export function TasksPanel() {
           </div>
         )}
 
-        {incomplete.map((task) => {
-          const isOverdue = task.due_date && isPast(parseISO(task.due_date)) && !isToday(parseISO(task.due_date))
-          return (
-            <TaskRow
-              key={task.id}
-              task={task}
-              isOverdue={!!isOverdue}
-              onToggle={() => toggleTask.mutate({ id: task.id, is_complete: true })}
-              onDelete={() => deleteTask.mutate(task.id)}
+        {/* Unscheduled section with drag & drop reorder */}
+        {unscheduled.length > 0 && (
+          <div className="mb-5">
+            <h3 className="px-1 mb-1.5 font-display text-xs font-semibold uppercase tracking-wider text-terracotta-500 select-none">
+              Unscheduled
+            </h3>
+            <UnscheduledTaskList
+              tasks={unscheduled}
+              variant="panel"
+              onToggle={(task) => toggleTask.mutate({ id: task.id, is_complete: true })}
+              onDelete={(task) => deleteTask.mutate(task.id)}
+              onReorder={(orderedIds) => reorderTasks.mutate(orderedIds)}
+              onSelect={handleSelectTask}
             />
-          )
-        })}
+          </div>
+        )}
+
+        {/* Scheduled section */}
+        {scheduled.length > 0 && (
+          <div className="mb-5">
+            <h3 className="px-1 mb-1.5 font-display text-xs font-semibold uppercase tracking-wider text-brown-700/60 select-none">
+              Coming up
+            </h3>
+            <div className="space-y-1">
+              {scheduled.map((task) => {
+                const isOverdue = task.due_date && isPast(parseISO(task.due_date)) && !isToday(parseISO(task.due_date))
+                return (
+                  <TaskRow
+                    key={task.id}
+                    task={task}
+                    isOverdue={!!isOverdue}
+                    onToggle={() => toggleTask.mutate({ id: task.id, is_complete: true })}
+                    onDelete={() => deleteTask.mutate(task.id)}
+                    onSelect={() => handleSelectTask(task)}
+                  />
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {complete.length > 0 && (
           <details className="mt-4">
@@ -142,12 +187,17 @@ export function TasksPanel() {
                   isOverdue={false}
                   onToggle={() => toggleTask.mutate({ id: task.id, is_complete: false })}
                   onDelete={() => deleteTask.mutate(task.id)}
+                  onSelect={() => handleSelectTask(task)}
                 />
               ))}
             </div>
           </details>
         )}
       </div>
+
+      {editingTask && (
+        <TaskForm task={editingTask} onClose={() => setEditingTask(null)} />
+      )}
     </div>
   )
 }
@@ -157,24 +207,30 @@ function TaskRow({
   isOverdue,
   onToggle,
   onDelete,
+  onSelect,
 }: {
-  task: { id: string; title: string; due_date: string | null; is_complete: boolean; assigned_member?: { display_name: string; avatar_color: string | null } | null }
+  task: any
   isOverdue: boolean
   onToggle: () => void
   onDelete: () => void
+  onSelect?: () => void
 }) {
   const [hovered, setHovered] = useState(false)
 
   return (
     <div
+      onClick={onSelect}
       className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors ${
         task.is_complete ? 'opacity-50' : 'hover:bg-cream-100'
-      }`}
+      } ${onSelect ? 'cursor-pointer' : ''}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       <button
-        onClick={onToggle}
+        onClick={(e) => {
+          e.stopPropagation()
+          onToggle()
+        }}
         className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
           task.is_complete
             ? 'border-terracotta-400 bg-terracotta-400'
@@ -207,7 +263,10 @@ function TaskRow({
 
       {hovered && !task.is_complete && (
         <button
-          onClick={onDelete}
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete()
+          }}
           className="flex-shrink-0 rounded p-1 text-brown-700/30 hover:text-red-400"
         >
           <svg className="h-3.5 w-3.5" viewBox="0 0 14 14" fill="none">

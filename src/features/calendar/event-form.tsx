@@ -149,7 +149,7 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
       <div className="absolute inset-0 bg-brown-900/30 backdrop-blur-sm" onClick={onClose}/>
 
       {/* Sheet */}
-      <div className="relative z-10 w-full max-w-lg bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="relative z-10 w-full max-w-lg short-modal-container bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-sand-100 flex-shrink-0">
           <h2 className="font-semibold text-brown-800 text-base">
@@ -178,185 +178,191 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
-          <div className="px-5 py-4 space-y-4">
-
-            {/* Title */}
-            <input
-              autoFocus
-              type="text"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="Event title"
-              className="w-full text-lg font-semibold text-brown-800 placeholder:text-brown-700/30 focus:outline-none border-b border-sand-200 pb-2"
-            />
-
-            {/* All-day toggle */}
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setAllDay(v => !v)}
-                className={`relative h-6 w-11 rounded-full transition-colors flex-shrink-0 ${allDay ? 'bg-terracotta-500' : 'bg-sand-300'}`}
-              >
-                <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${allDay ? 'translate-x-5' : 'translate-x-0'}`}/>
-              </button>
-              <span className="text-sm text-brown-700">All day</span>
-            </div>
-
-            {/* Date/time pickers */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-brown-700/60">
-                  {allDay ? 'Start date' : 'Start'}
-                </label>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={e => setStartDate(e.target.value)}
-                  className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3 py-2 text-sm text-brown-800 focus:border-terracotta-500 focus:outline-none [color-scheme:light]"
-                />
-                {!allDay && (
-                  <input
-                    type="time"
-                    value={startTime}
-                    onChange={e => setStartTime(e.target.value)}
-                    className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3 py-2 text-sm text-brown-800 focus:border-terracotta-500 focus:outline-none [color-scheme:light]"
-                  />
-                )}
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-brown-700/60">
-                  {allDay ? 'End date' : 'End'}
-                </label>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={e => setEndDate(e.target.value)}
-                  className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3 py-2 text-sm text-brown-800 focus:border-terracotta-500 focus:outline-none [color-scheme:light]"
-                />
-                {!allDay && (
-                  <input
-                    type="time"
-                    value={endTime}
-                    onChange={e => setEndTime(e.target.value)}
-                    className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3 py-2 text-sm text-brown-800 focus:border-terracotta-500 focus:outline-none [color-scheme:light]"
-                  />
-                )}
-              </div>
-            </div>
-
-            {/* Location */}
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-brown-700/60">Location</label>
+          <div className="px-5 py-4 space-y-4 short-form-grid">
+            
+            {/* Left Column */}
+            <div className="space-y-4">
+              {/* Title */}
               <input
+                autoFocus
                 type="text"
-                value={location}
-                onChange={e => setLocation(e.target.value)}
-                placeholder="Add location"
-                className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3 py-2 text-sm text-brown-800 placeholder:text-brown-700/30 focus:border-terracotta-500 focus:outline-none"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                placeholder="Event title"
+                className="w-full text-lg font-semibold text-brown-800 placeholder:text-brown-700/30 focus:outline-none border-b border-sand-200 pb-2"
               />
-            </div>
 
-            {/* Description */}
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-brown-700/60">Notes</label>
-              <textarea
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                placeholder="Add notes"
-                rows={2}
-                className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3 py-2 text-sm text-brown-800 placeholder:text-brown-700/30 focus:border-terracotta-500 focus:outline-none resize-none"
-              />
-            </div>
-
-            {/* Calendar picker */}
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-brown-700/60">Save to calendar</label>
-              <div className="space-y-1">
-                {Array.from(calsByMember.entries()).map(([ownerName, cals]) => (
-                  <div key={ownerName}>
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-brown-700/40 px-1 mb-1">
-                      {ownerName}
-                    </p>
-                    {cals!.map(cal => {
-                      const isSelected = selectedCalendarId === cal.calendar_id
-                      return (
-                        <label
-                          key={cal.id}
-                          className={`flex items-center gap-3 rounded-xl px-3 py-2.5 cursor-pointer transition-colors ${
-                            isSelected ? 'bg-cream-100' : 'hover:bg-cream-50'
-                          }`}
-                          onClick={() => { setSelectedCalendarId(cal.calendar_id); setSelectedMemberId(cal.family_member_id) }}
-                        >
-                          <div
-                            className="h-4 w-4 rounded flex-shrink-0 flex items-center justify-center"
-                            style={{ backgroundColor: cal.color ?? '#5B7FB5' }}
-                          >
-                            {isSelected && (
-                              <svg className="h-2.5 w-2.5 text-white" viewBox="0 0 10 10" fill="none">
-                                <path d="M2 5l2.5 2.5 3.5-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                              </svg>
-                            )}
-                          </div>
-                          <span className="text-sm text-brown-800 flex-1">{cal.calendar_name}</span>
-                          {cal.is_default && (
-                            <span className="text-[11px] text-brown-700/40 bg-sand-100 rounded px-1.5 py-0.5">default</span>
-                          )}
-                          {!cal.is_default && isSelected && (
-                            <button
-                              type="button"
-                              onClick={e => { e.stopPropagation(); setDefault.mutate({ calendarId: cal.calendar_id }) }}
-                              className="text-[11px] text-terracotta-500 hover:text-terracotta-600"
-                            >
-                              Set default
-                            </button>
-                          )}
-                        </label>
-                      )
-                    })}
-                  </div>
-                ))}
+              {/* All-day toggle */}
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setAllDay(v => !v)}
+                  className={`relative h-6 w-11 rounded-full transition-colors flex-shrink-0 ${allDay ? 'bg-terracotta-500' : 'bg-sand-300'}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${allDay ? 'translate-x-5' : 'translate-x-0'}`}/>
+                </button>
+                <span className="text-sm text-brown-700">All day</span>
               </div>
-            </div>
 
-            {/* Family attendees */}
-            {familyMembers && familyMembers.length > 1 && (
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-brown-700/60">Invite family</label>
-                <div className="flex flex-wrap gap-2">
-                  {familyMembers
-                    .filter(m => m.id !== selectedMemberId)
-                    .map(m => {
-                      const email = getMemberEmail(m.id)
-                      if (!email) return null
-                      const isAdded = attendeeEmails.has(email)
-                      return (
-                        <button
-                          key={m.id}
-                          type="button"
-                          onClick={() => toggleAttendee(email)}
-                          className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-colors border ${
-                            isAdded
-                              ? 'border-transparent text-white'
-                              : 'border-sand-200 text-brown-700 hover:bg-cream-100'
-                          }`}
-                          style={isAdded ? { backgroundColor: m.avatar_color ?? '#5B7FB5', borderColor: m.avatar_color ?? '#5B7FB5' } : {}}
-                        >
-                          <div
-                            className="h-5 w-5 rounded-full flex-shrink-0"
-                            style={{ backgroundColor: m.avatar_color ?? '#5B7FB5', opacity: isAdded ? 1 : 0.6 }}
-                          />
-                          {m.display_name}
-                          {isAdded && (
-                            <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
-                              <path d="M2 6l2.5 2.5 5.5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          )}
-                        </button>
-                      )
-                    })}
+              {/* Date/time pickers */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-brown-700/60">
+                    {allDay ? 'Start date' : 'Start'}
+                  </label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={e => setStartDate(e.target.value)}
+                    className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3 py-2 text-sm text-brown-800 focus:border-terracotta-500 focus:outline-none [color-scheme:light]"
+                  />
+                  {!allDay && (
+                    <input
+                      type="time"
+                      value={startTime}
+                      onChange={e => setStartTime(e.target.value)}
+                      className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3 py-2 text-sm text-brown-800 focus:border-terracotta-500 focus:outline-none [color-scheme:light]"
+                    />
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-brown-700/60">
+                    {allDay ? 'End date' : 'End'}
+                  </label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={e => setEndDate(e.target.value)}
+                    className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3 py-2 text-sm text-brown-800 focus:border-terracotta-500 focus:outline-none [color-scheme:light]"
+                  />
+                  {!allDay && (
+                    <input
+                      type="time"
+                      value={endTime}
+                      onChange={e => setEndTime(e.target.value)}
+                      className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3 py-2 text-sm text-brown-800 focus:border-terracotta-500 focus:outline-none [color-scheme:light]"
+                    />
+                  )}
                 </div>
               </div>
-            )}
+
+              {/* Location */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-brown-700/60">Location</label>
+                <input
+                  type="text"
+                  value={location}
+                  onChange={e => setLocation(e.target.value)}
+                  placeholder="Add location"
+                  className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3 py-2 text-sm text-brown-800 placeholder:text-brown-700/30 focus:border-terracotta-500 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Right Column */}
+            <div className="space-y-4">
+              {/* Description */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-brown-700/60">Notes</label>
+                <textarea
+                  value={description}
+                  onChange={e => setDescription(e.target.value)}
+                  placeholder="Add notes"
+                  rows={2}
+                  className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3 py-2 text-sm text-brown-800 placeholder:text-brown-700/30 focus:border-terracotta-500 focus:outline-none resize-none"
+                />
+              </div>
+
+              {/* Calendar picker */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-brown-700/60">Save to calendar</label>
+                <div className="space-y-1">
+                  {Array.from(calsByMember.entries()).map(([ownerName, cals]) => (
+                    <div key={ownerName}>
+                      <p className="text-[11px] font-semibold uppercase tracking-widest text-brown-700/40 px-1 mb-1">
+                        {ownerName}
+                      </p>
+                      {cals!.map(cal => {
+                        const isSelected = selectedCalendarId === cal.calendar_id
+                        return (
+                          <label
+                            key={cal.id}
+                            className={`flex items-center gap-3 rounded-xl px-3 py-2.5 cursor-pointer transition-colors ${
+                              isSelected ? 'bg-cream-100' : 'hover:bg-cream-50'
+                            }`}
+                            onClick={() => { setSelectedCalendarId(cal.calendar_id); setSelectedMemberId(cal.family_member_id) }}
+                          >
+                            <div
+                              className="h-4 w-4 rounded flex-shrink-0 flex items-center justify-center"
+                              style={{ backgroundColor: cal.color ?? '#5B7FB5' }}
+                            >
+                              {isSelected && (
+                                <svg className="h-2.5 w-2.5 text-white" viewBox="0 0 10 10" fill="none">
+                                  <path d="M2 5l2.5 2.5 3.5-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              )}
+                            </div>
+                            <span className="text-sm text-brown-800 flex-1">{cal.calendar_name}</span>
+                            {cal.is_default && (
+                              <span className="text-[11px] text-brown-700/40 bg-sand-100 rounded px-1.5 py-0.5">default</span>
+                            )}
+                            {!cal.is_default && isSelected && (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setDefault.mutate({ calendarId: cal.calendar_id }) }}
+                                className="text-[11px] text-terracotta-500 hover:text-terracotta-600"
+                              >
+                                Set default
+                              </button>
+                            )}
+                          </label>
+                        )
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Family attendees */}
+              {familyMembers && familyMembers.length > 1 && (
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-brown-700/60">Invite family</label>
+                  <div className="flex flex-wrap gap-2">
+                    {familyMembers
+                      .filter(m => m.id !== selectedMemberId)
+                      .map(m => {
+                        const email = getMemberEmail(m.id)
+                        if (!email) return null
+                        const isAdded = attendeeEmails.has(email)
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => toggleAttendee(email)}
+                            className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-colors border ${
+                              isAdded
+                                ? 'border-transparent text-white'
+                                : 'border-sand-200 text-brown-700 hover:bg-cream-100'
+                            }`}
+                            style={isAdded ? { backgroundColor: m.avatar_color ?? '#5B7FB5', borderColor: m.avatar_color ?? '#5B7FB5' } : {}}
+                          >
+                            <div
+                              className="h-5 w-5 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: m.avatar_color ?? '#5B7FB5', opacity: isAdded ? 1 : 0.6 }}
+                            />
+                            {m.display_name}
+                            {isAdded && (
+                              <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
+                                <path d="M2 6l2.5 2.5 5.5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            )}
+                          </button>
+                        )
+                      })}
+                  </div>
+                </div>
+              )}
+            </div>
 
           </div>
 

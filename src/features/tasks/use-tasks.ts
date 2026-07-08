@@ -16,6 +16,7 @@ export interface Task {
   created_at: string
   google_task_id: string | null
   google_tasklist_id: string | null
+  position?: number | null
   // joined
   assigned_member?: { display_name: string; avatar_color: string | null } | null
 }
@@ -71,6 +72,26 @@ async function completeGoogleTask(
   })
 }
 
+async function updateGoogleTask(
+  token: string,
+  googleTaskId: string,
+  tasklistId: string,
+  task: { title?: string; notes?: string | null; due_date?: string | null }
+): Promise<void> {
+  const body: any = {}
+  if (task.title !== undefined) body.title = task.title
+  if (task.notes !== undefined) body.notes = task.notes ?? ''
+  if (task.due_date !== undefined) {
+    body.due = task.due_date ? `${task.due_date}T00:00:00.000Z` : null
+  }
+
+  await fetch(`${GTASKS}/lists/${encodeURIComponent(tasklistId)}/tasks/${encodeURIComponent(googleTaskId)}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
 async function deleteGoogleTask(
   token: string,
   googleTaskId: string,
@@ -90,6 +111,8 @@ export function useTasks() {
   return useQuery({
     queryKey: ['tasks', member?.family_id],
     enabled: !!member?.family_id,
+    staleTime: 1000 * 30,
+    refetchInterval: 1000 * 30,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('tasks')
@@ -115,6 +138,8 @@ export function useTodayTasks() {
   return useQuery({
     queryKey: ['tasks-today', member?.family_id, today],
     enabled: !!member?.family_id,
+    staleTime: 1000 * 30,
+    refetchInterval: 1000 * 30,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('tasks')
@@ -162,15 +187,22 @@ export function useCreateTask() {
 
       // 2. Push to Google Tasks in background (non-blocking)
       getGoogleToken().then(async token => {
-        if (!token) return
-        const result = await pushTaskToGoogle(token, input)
-        if (result) {
-          // Store the Google Task ID back on our task
-          await supabase
-            .from('tasks')
-            .update({ google_task_id: result.id, google_tasklist_id: result.tasklistId } as any)
-            .eq('id', task.id)
+        if (token) {
+          const result = await pushTaskToGoogle(token, input)
+          if (result) {
+            await supabase
+              .from('tasks')
+              .update({ google_task_id: result.id, google_tasklist_id: result.tasklistId })
+              .eq('id', task.id)
+            return
+          }
         }
+        // Fallback: invoke server-side edge function which uses refreshed OAuth token from DB
+        const { data: { session } } = await supabase.auth.getSession()
+        await supabase.functions.invoke('sync-tasks', {
+          body: { action: 'create', task_id: task.id },
+          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+        })
       })
 
       return task
@@ -202,8 +234,21 @@ export function useToggleTask() {
 
       // Sync to Google Tasks if linked
       if (task?.google_task_id && task?.google_tasklist_id) {
-        getGoogleToken().then(token => {
-          if (token) completeGoogleTask(token, task.google_task_id!, task.google_tasklist_id!, is_complete)
+        getGoogleToken().then(async token => {
+          if (token) {
+            await completeGoogleTask(token, task.google_task_id!, task.google_tasklist_id!, is_complete)
+          } else {
+            const { data: { session } } = await supabase.auth.getSession()
+            await supabase.functions.invoke('sync-tasks', {
+              body: {
+                action: 'complete',
+                google_task_id: task.google_task_id,
+                google_tasklist_id: task.google_tasklist_id,
+                is_complete,
+              },
+              headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+            })
+          }
         })
       }
     },
@@ -227,6 +272,75 @@ export function useToggleTask() {
   })
 }
 
+export function useUpdateTask() {
+  const queryClient = useQueryClient()
+  const { data: member } = useFamilyMember()
+
+  return useMutation({
+    mutationFn: async (input: {
+      id: string
+      title: string
+      due_date?: string | null
+      assigned_to?: string | null
+      notes?: string | null
+      is_complete?: boolean
+    }) => {
+      const { data: existing } = await (supabase.from('tasks') as any)
+        .select('google_task_id, google_tasklist_id, is_complete')
+        .eq('id', input.id)
+        .maybeSingle()
+
+      const updates: any = {
+        title: input.title,
+        due_date: input.due_date ?? null,
+        assigned_to: input.assigned_to ?? null,
+        notes: input.notes ?? null,
+      }
+      if (input.is_complete !== undefined) {
+        updates.is_complete = input.is_complete
+      }
+
+      const { data: task, error } = await (supabase.from('tasks') as any)
+        .update(updates)
+        .eq('id', input.id)
+        .select()
+        .single()
+      if (error) throw error
+
+      if (existing?.google_task_id && existing?.google_tasklist_id) {
+        getGoogleToken().then(async token => {
+          if (token) {
+            await updateGoogleTask(token, existing.google_task_id!, existing.google_tasklist_id!, input)
+            if (input.is_complete !== undefined && input.is_complete !== existing.is_complete) {
+              await completeGoogleTask(token, existing.google_task_id!, existing.google_tasklist_id!, input.is_complete)
+            }
+          } else {
+            const { data: { session } } = await supabase.auth.getSession()
+            await supabase.functions.invoke('sync-tasks', {
+              body: {
+                action: 'update',
+                google_task_id: existing.google_task_id,
+                google_tasklist_id: existing.google_tasklist_id,
+                title: input.title,
+                notes: input.notes,
+                due_date: input.due_date,
+                ...(input.is_complete !== undefined ? { is_complete: input.is_complete } : {}),
+              },
+              headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+            })
+          }
+        })
+      }
+
+      return task
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks', member?.family_id] })
+      queryClient.invalidateQueries({ queryKey: ['tasks-today', member?.family_id] })
+    },
+  })
+}
+
 export function useDeleteTask() {
   const queryClient = useQueryClient()
   const { data: member } = useFamilyMember()
@@ -244,8 +358,20 @@ export function useDeleteTask() {
 
       // Delete from Google Tasks in background
       if (task?.google_task_id && task?.google_tasklist_id) {
-        getGoogleToken().then(token => {
-          if (token) deleteGoogleTask(token, task.google_task_id!, task.google_tasklist_id!)
+        getGoogleToken().then(async token => {
+          if (token) {
+            await deleteGoogleTask(token, task.google_task_id!, task.google_tasklist_id!)
+          } else {
+            const { data: { session } } = await supabase.auth.getSession()
+            await supabase.functions.invoke('sync-tasks', {
+              body: {
+                action: 'delete',
+                google_task_id: task.google_task_id,
+                google_tasklist_id: task.google_tasklist_id,
+              },
+              headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+            })
+          }
         })
       }
     },
@@ -276,6 +402,116 @@ export function useSyncTasks() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks', member?.family_id] })
+      queryClient.invalidateQueries({ queryKey: ['tasks-today', member?.family_id] })
     },
   })
 }
+
+// ── Reorder Unscheduled Tasks ──────────────────────────────────────────────
+
+export function sortUnscheduledTasks(tasks: Task[], familyId?: string): Task[] {
+  if (!tasks || tasks.length === 0) return []
+
+  let savedIds: string[] = []
+  if (familyId && typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem(`supfam_unscheduled_order_${familyId}`)
+      if (stored) savedIds = JSON.parse(stored)
+    } catch {
+      // ignore
+    }
+  }
+
+  const idToIndex = new Map<string, number>()
+  savedIds.forEach((id, idx) => idToIndex.set(id, idx))
+
+  return [...tasks].sort((a, b) => {
+    const idxA = idToIndex.get(a.id)
+    const idxB = idToIndex.get(b.id)
+
+    // If both have saved order, sort by saved order
+    if (idxA !== undefined && idxB !== undefined) {
+      return idxA - idxB
+    }
+    // If both have database position, sort by position
+    if (a.position != null && b.position != null && a.position !== b.position) {
+      return a.position - b.position
+    }
+    // If only A has order/position and B does not (B is newly added)
+    if ((idxA !== undefined || a.position != null) && idxB === undefined && b.position == null) {
+      return b.created_at > a.created_at ? 1 : -1
+    }
+    // If only B has order/position and A does not (A is newly added)
+    if ((idxB !== undefined || b.position != null) && idxA === undefined && a.position == null) {
+      return a.created_at > b.created_at ? -1 : 1
+    }
+    // Default: newest first
+    return b.created_at.localeCompare(a.created_at)
+  })
+}
+
+export function useReorderTasks() {
+  const queryClient = useQueryClient()
+  const { data: member } = useFamilyMember()
+
+  return useMutation({
+    mutationFn: async (orderedIds: string[]) => {
+      if (!member) return
+
+      // 1. Immediately persist to localStorage for instant reliable local ordering
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(`supfam_unscheduled_order_${member.family_id}`, JSON.stringify(orderedIds))
+        } catch {
+          // ignore
+        }
+      }
+
+      // 2. Persist position updates to database in background
+      try {
+        await Promise.all(
+          orderedIds.map((id, index) =>
+            (supabase.from('tasks') as any).update({ position: index }).eq('id', id)
+          )
+        )
+      } catch {
+        // Silently ignore if migration hasn't run yet on live DB
+      }
+    },
+    onMutate: async (orderedIds: string[]) => {
+      await queryClient.cancelQueries({ queryKey: ['tasks', member?.family_id] })
+      const prev = queryClient.getQueryData<Task[]>(['tasks', member?.family_id])
+
+      if (member && typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(`supfam_unscheduled_order_${member.family_id}`, JSON.stringify(orderedIds))
+        } catch {
+          // ignore
+        }
+      }
+
+      if (prev) {
+        const idToIndex = new Map<string, number>()
+        orderedIds.forEach((id, idx) => idToIndex.set(id, idx))
+        const updated = prev.map(t => {
+          if (idToIndex.has(t.id)) {
+            return { ...t, position: idToIndex.get(t.id) }
+          }
+          return t
+        })
+        queryClient.setQueryData<Task[]>(['tasks', member?.family_id], updated)
+      }
+
+      return { prev }
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) {
+        queryClient.setQueryData(['tasks', member?.family_id], ctx.prev)
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks', member?.family_id] })
+    },
+  })
+}
+

@@ -7,6 +7,9 @@ import {
 } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
+import { App } from '@capacitor/app'
+import { Browser } from '@capacitor/browser'
+import { Capacitor } from '@capacitor/core'
 
 interface AuthState {
   session: Session | null
@@ -23,6 +26,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return
+
+    const sub = App.addListener('appUrlOpen', async (event) => {
+      if (event.url.startsWith('com.supfam.app://')) {
+        try {
+          await Browser.close()
+        } catch {
+          // ignore if browser already closed
+        }
+
+        const url = new URL(event.url)
+        if (url.hash && url.hash.includes('access_token=')) {
+          const params = new URLSearchParams(url.hash.substring(1))
+          const access_token = params.get('access_token')
+          const refresh_token = params.get('refresh_token')
+          if (access_token && refresh_token) {
+            await supabase.auth.setSession({ access_token, refresh_token })
+          }
+        } else if (url.searchParams.get('code')) {
+          const code = url.searchParams.get('code')!
+          await supabase.auth.exchangeCodeForSession(code)
+        }
+      }
+    })
+
+    return () => {
+      sub.then((listener) => listener.remove())
+    }
+  }, [])
+
+  useEffect(() => {
+    // If running inside Chrome/external browser right after mobile OAuth redirect, attempt JS redirect
+    if (
+      !Capacitor.isNativePlatform() &&
+      window.location.search.includes('native=true') &&
+      (window.location.hash.includes('access_token=') || window.location.search.includes('code='))
+    ) {
+      window.location.href = 'com.supfam.app://auth' + window.location.search + window.location.hash
+    }
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
@@ -46,22 +89,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signInWithGoogle = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        scopes: 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/tasks',
-        redirectTo: window.location.origin,
-        queryParams: {
-          // Force Google to show the consent screen so new scopes are always granted
-          access_type: 'offline',
-          prompt: 'consent',
+    if (Capacitor.isNativePlatform()) {
+      const { data } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          scopes: 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/tasks',
+          redirectTo: 'com.supfam.app://auth',
+          skipBrowserRedirect: true,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
         },
-      },
-    })
+      })
+      if (data?.url) {
+        await Browser.open({ url: data.url })
+      }
+    } else {
+      await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          scopes: 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/tasks',
+          redirectTo: window.location.origin,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      })
+    }
   }
 
   const signOut = async () => {
     await supabase.auth.signOut()
+  }
+
+  // If Chrome browser blocks automatic redirect when returning via web URL, provide a direct click button
+  if (
+    !Capacitor.isNativePlatform() &&
+    typeof window !== 'undefined' &&
+    window.location.search.includes('native=true') &&
+    (window.location.hash.includes('access_token=') || window.location.search.includes('code='))
+  ) {
+    const deepLinkUrl = 'com.supfam.app://auth' + window.location.search + window.location.hash
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-950 p-6 text-center text-white">
+        <div className="max-w-md space-y-4 rounded-xl bg-zinc-900 p-6 shadow-lg border border-zinc-800">
+          <h2 className="text-xl font-bold">Login Complete!</h2>
+          <p className="text-sm text-zinc-400">Tap below to return to the Sup Fam tablet app.</p>
+          <a
+            href={deepLinkUrl}
+            className="inline-block w-full rounded-lg bg-emerald-600 px-4 py-3 font-semibold text-white shadow transition hover:bg-emerald-500"
+          >
+            Return to App
+          </a>
+        </div>
+      </div>
+    )
   }
 
   return (

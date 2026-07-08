@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { format, isToday, isPast, parseISO } from 'date-fns'
-import { useTodayTasks, useToggleTask } from '@/features/tasks/use-tasks'
+import { useTodayTasks, useToggleTask, type Task } from '@/features/tasks/use-tasks'
+import { TaskForm } from '@/features/tasks/task-form'
 import { useFamilyMember } from '@/features/auth/use-family-member'
 
-export function TodayPanel() {
+export function TodayPanel({ onSelectTask }: { onSelectTask?: (task: Task) => void }) {
   const { data: member } = useFamilyMember()
   const { data: todayTasks, isLoading } = useTodayTasks()
   const toggleTask = useToggleTask()
@@ -10,6 +12,15 @@ export function TodayPanel() {
   const today = new Date()
   const dayName = format(today, 'EEEE')
   const dateStr = format(today, 'MMMM d')
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
+
+  const handleSelectTask = (task: Task) => {
+    if (onSelectTask) {
+      onSelectTask(task)
+    } else {
+      setEditingTask(task)
+    }
+  }
 
   const overdue = todayTasks?.filter(
     (t) => t.due_date && isPast(parseISO(t.due_date)) && !isToday(parseISO(t.due_date))
@@ -41,6 +52,7 @@ export function TodayPanel() {
                 key={task.id}
                 task={task}
                 onToggle={() => toggleTask.mutate({ id: task.id, is_complete: true })}
+                onSelect={() => handleSelectTask(task)}
                 overdue
               />
             ))}
@@ -70,6 +82,7 @@ export function TodayPanel() {
                 key={task.id}
                 task={task}
                 onToggle={() => toggleTask.mutate({ id: task.id, is_complete: true })}
+                onSelect={() => handleSelectTask(task)}
                 overdue={false}
               />
             ))}
@@ -88,6 +101,10 @@ export function TodayPanel() {
           </div>
         </div>
       )}
+
+      {editingTask && (
+        <TaskForm task={editingTask} onClose={() => setEditingTask(null)} />
+      )}
     </div>
   )
 }
@@ -95,20 +112,26 @@ export function TodayPanel() {
 function TodayTaskRow({
   task,
   onToggle,
+  onSelect,
   overdue,
 }: {
-  task: { id: string; title: string; due_date: string | null; is_complete: boolean; assigned_member?: { display_name: string; avatar_color: string | null } | null }
+  task: any
   onToggle: () => void
+  onSelect?: () => void
   overdue: boolean
 }) {
   return (
     <div
+      onClick={onSelect}
       className={`flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-cream-100 ${
         overdue ? 'bg-red-50/50 border border-red-100' : ''
-      }`}
+      } ${onSelect ? 'cursor-pointer' : ''}`}
     >
       <button
-        onClick={onToggle}
+        onClick={(e) => {
+          e.stopPropagation()
+          onToggle()
+        }}
         className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 border-sand-400 transition-colors hover:border-terracotta-400"
       />
       <div className="min-w-0 flex-1">
