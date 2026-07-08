@@ -281,7 +281,7 @@ These go in `.env.local` for development and in Vercel's environment variables f
 - **Vercel** auto-deploys from `main` branch on GitHub
 - Frontend only — no server to deploy
 - Supabase Edge Functions & migrations deploy via Supabase CLI (`npx supabase`)
-- The AI assistant is authorized and expected to handle all Git commits, branch pushes, PR merges, and Supabase CLI commands via the terminal to manage deployments and database updates automatically.
+- The AI assistant MUST handle all Git commits, branch pushes (`git push origin main`), PR merges, and Supabase CLI commands directly via the terminal (`run_command`) when deploying or updating code. Never instruct the user to use GitHub Desktop or run git commands manually.
 
 ---
 
@@ -299,7 +299,7 @@ These go in `.env.local` for development and in Vercel's environment variables f
 
 ## Important Constraints
 
-- **AI terminal automation for Git & Supabase.** The AI assistant is authorized to execute git commands, GitHub CLI (`gh`), and Supabase CLI commands via the terminal on behalf of the user to handle version control, PRs, database migrations, and deployments.
+- **AI terminal automation for Git & Supabase.** The AI assistant is explicitly authorized and instructed to execute git commands (`git add`, `git commit`, `git push`), GitHub CLI (`gh`), and Supabase CLI commands via the terminal (`run_command`) on behalf of the user to handle version control, PRs, database migrations, and production deployments directly. Never tell the user to push manually via GitHub Desktop.
 - **No separate backend server.** Everything goes through Supabase.
 - **No dark mode.** The app is always warm cream.
 - **iPad landscape is the primary design target.** Don't optimize for mobile first.
