@@ -41,8 +41,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const params = new URLSearchParams(url.hash.substring(1))
           const access_token = params.get('access_token')
           const refresh_token = params.get('refresh_token')
+          const provider_token = params.get('provider_token')
+          const provider_refresh_token = params.get('provider_refresh_token')
+          const expires_in = params.get('expires_in')
+
           if (access_token && refresh_token) {
-            await supabase.auth.setSession({ access_token, refresh_token })
+            const { data: { session } } = await supabase.auth.setSession({ access_token, refresh_token })
+            if (session && provider_token) {
+              const expiresAt = expires_in ? new Date(Date.now() + parseInt(expires_in) * 1000).toISOString() : null
+              pendingTokens.set(session.user.id, {
+                access: provider_token,
+                refresh: provider_refresh_token ?? null,
+                expiresAt,
+              })
+              await flushPendingToken(session.user.id)
+            }
           }
         } else if (url.searchParams.get('code')) {
           const code = url.searchParams.get('code')!
