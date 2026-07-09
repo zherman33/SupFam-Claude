@@ -34,9 +34,9 @@ export function AdvancedSettings({ onClose }: { onClose: () => void }) {
   return (
     // Full-screen overlay
     <div className="fixed inset-0 z-50 flex items-stretch justify-end">
-      {/* Backdrop */}
+      {/* Backdrop — transparent overlay to allow viewing real-time background layout changes */}
       <div
-        className="absolute inset-0 bg-brown-900/20 backdrop-blur-sm"
+        className="absolute inset-0 bg-brown-900/5"
         onClick={onClose}
       />
 

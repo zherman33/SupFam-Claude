@@ -256,7 +256,7 @@ export function CalendarView({
                 <button
                   key={m}
                   onClick={() => onModeChange(m)}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                  className={`rounded-md px-2.5 py-1 text-[0.6875rem] font-semibold transition-colors ${
                     mode === m
                       ? 'bg-white text-brown-800 shadow-sm'
                       : 'text-brown-700/50 hover:text-brown-800'
@@ -277,7 +277,7 @@ export function CalendarView({
           <div
             key={d}
             className={`text-center font-semibold uppercase tracking-widest ${
-              mode === 'month' ? 'text-[11px]' : mode === '3week' ? 'text-xs' : 'text-[13px]'
+              mode === 'month' ? 'text-[0.6875rem]' : mode === '3week' ? 'text-xs' : 'text-[0.8125rem]'
             } ${
               i === todayDow
                 ? 'text-terracotta-500'
@@ -430,14 +430,14 @@ export function CalendarView({
                           {isCurrentDay ? (
                             // Outline ring — subtle, lighter feel
                             <span className={`inline-flex items-center justify-center rounded-full border border-terracotta-400 text-terracotta-500 font-semibold leading-none ${
-                              mode === 'month' ? 'h-[22px] w-[22px] text-[11px]' : 'h-[26px] w-[26px] text-[13px]'
+                              mode === 'month' ? 'h-[1.375rem] w-[1.375rem] text-[0.6875rem]' : 'h-[1.625rem] w-[1.625rem] text-[0.8125rem]'
                             }`}>
                               {format(day, 'd')}
                             </span>
                           ) : (
                             <span className={`
                               inline-flex items-center justify-center rounded-full font-bold leading-none
-                              ${mode === 'month' ? 'h-[18px] w-[18px] text-[10px]' : 'h-[22px] w-[22px] text-[12px]'}
+                              ${mode === 'month' ? 'h-[1.125rem] w-[1.125rem] text-[0.625rem]' : 'h-[1.375rem] w-[1.375rem] text-[0.75rem]'}
                               ${isWeekend ? 'text-brown-700/30' : 'text-brown-700/60'}
                             `}>
                               {format(day, 'd')}
@@ -579,13 +579,13 @@ function EventPill({
     ? `${formatTimeShort(ev.start_at)} ${ev.title}`
     : ev.title
 
-  const barWidth = mode === 'month' ? 'w-[3px]' : mode === '3week' ? 'w-1' : 'w-1.5'
+  const barWidth = mode === 'month' ? 'w-[0.1875rem]' : mode === '3week' ? 'w-1' : 'w-1.5'
   const padding = mode === 'month' ? 'px-1 py-px' : mode === '3week' ? 'px-1.5 py-1' : 'px-2 py-1.5'
   const textSize = mode === 'month'
-    ? 'text-[10px] font-medium leading-snug'
+    ? 'text-[0.625rem] font-medium leading-snug'
     : mode === '3week'
-    ? 'text-[13.5px] font-semibold leading-snug'
-    : 'text-[15px] font-semibold leading-snug'
+    ? 'text-[0.84375rem] font-semibold leading-snug'
+    : 'text-[0.9375rem] font-semibold leading-snug'
 
   const negMarginLeft = isBanner && !isStart ? (mode === 'month' ? '-7px' : '-9px') : undefined
   const negMarginRight = isBanner && !isEnd ? (mode === 'month' ? '-7px' : '-9px') : undefined
@@ -633,10 +633,10 @@ function EventPill({
 function BannerSpacer({ mode = 'month' }: { mode?: CalendarMode }) {
   const padding = mode === 'month' ? 'px-1 py-px' : mode === '3week' ? 'px-1.5 py-1' : 'px-2 py-1.5'
   const textSize = mode === 'month'
-    ? 'text-[10px] font-medium leading-snug'
+    ? 'text-[0.625rem] font-medium leading-snug'
     : mode === '3week'
-    ? 'text-[13.5px] font-semibold leading-snug'
-    : 'text-[15px] font-semibold leading-snug'
+    ? 'text-[0.84375rem] font-semibold leading-snug'
+    : 'text-[0.9375rem] font-semibold leading-snug'
 
   return (
     <div className="flex items-stretch overflow-hidden flex-shrink-0 opacity-0 pointer-events-none">
@@ -657,14 +657,14 @@ function TaskPill({
   onClick?: (e: React.MouseEvent) => void
 }) {
   const color = task.assigned_member?.avatar_color ?? '#C4714F'
-  const barWidth = mode === 'month' ? 'w-[3px]' : mode === '3week' ? 'w-1' : 'w-1.5'
+  const barWidth = mode === 'month' ? 'w-[0.1875rem]' : mode === '3week' ? 'w-1' : 'w-1.5'
   const padding = mode === 'month' ? 'px-1 py-px' : mode === '3week' ? 'px-1.5 py-1' : 'px-2 py-1.5'
-  const checkSize = mode === 'month' ? 'text-[10px]' : mode === '3week' ? 'text-[12px]' : 'text-[14px]'
+  const checkSize = mode === 'month' ? 'text-[0.625rem]' : mode === '3week' ? 'text-[0.75rem]' : 'text-[0.875rem]'
   const textSize = mode === 'month'
-    ? 'text-[12px] font-medium leading-snug'
+    ? 'text-[0.75rem] font-medium leading-snug'
     : mode === '3week'
-    ? 'text-[13.5px] font-semibold leading-snug'
-    : 'text-[15px] font-semibold leading-snug'
+    ? 'text-[0.84375rem] font-semibold leading-snug'
+    : 'text-[0.9375rem] font-semibold leading-snug'
 
   return (
     <div
