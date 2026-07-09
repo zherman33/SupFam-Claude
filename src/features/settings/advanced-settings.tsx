@@ -8,6 +8,14 @@ import {
 } from './use-event-color-rules'
 import { useConnectedCalendars, useUpdateCalendarColor, useDeleteConnectedCalendar, useToggleQuickToggle, type ConnectedCalendar } from '@/features/calendar/use-calendar'
 import { AddCalendarModal } from '@/features/calendar/add-calendar-modal'
+import {
+  FONT_SIZE_STEPS,
+  LOCAL_STORAGE_KEY,
+  getSavedFontSize,
+  applyFontSize,
+  type FontSizeScale,
+} from './font-size-utils'
+
 
 const PRESET_COLORS = [
   { label: 'Pink', value: '#E91E8C' },
@@ -53,6 +61,7 @@ export function AdvancedSettings({ onClose }: { onClose: () => void }) {
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto divide-y divide-sand-100">
           <ConnectedCalendarColorsSection />
+          <FontSizeSettingsSection />
           <EventColorRulesSection />
         </div>
       </div>
@@ -533,3 +542,105 @@ function RuleRow({
     </div>
   )
 }
+
+function FontSizeSettingsSection() {
+  const [fontSize, setFontSize] = useState<FontSizeScale>(getSavedFontSize)
+
+  const handleDecrease = () => {
+    const currentIndex = FONT_SIZE_STEPS.findIndex(s => s.value === fontSize)
+    if (currentIndex > 0) {
+      const nextSize = FONT_SIZE_STEPS[currentIndex - 1].value
+      setFontSize(nextSize)
+      localStorage.setItem(LOCAL_STORAGE_KEY, nextSize)
+      applyFontSize(nextSize)
+    }
+  }
+
+  const handleIncrease = () => {
+    const currentIndex = FONT_SIZE_STEPS.findIndex(s => s.value === fontSize)
+    if (currentIndex < FONT_SIZE_STEPS.length - 1) {
+      const nextSize = FONT_SIZE_STEPS[currentIndex + 1].value
+      setFontSize(nextSize)
+      localStorage.setItem(LOCAL_STORAGE_KEY, nextSize)
+      applyFontSize(nextSize)
+    }
+  }
+
+  const currentIndex = FONT_SIZE_STEPS.findIndex(s => s.value === fontSize)
+  const currentStep = FONT_SIZE_STEPS[currentIndex] || FONT_SIZE_STEPS[1]
+
+  return (
+    <div className="p-6">
+      <div className="mb-4">
+        <p className="text-sm font-semibold text-brown-800">App scale & text size</p>
+        <p className="text-xs text-brown-700/50 mt-0.5">
+          Adjust the layout scale and font sizes for better readability from a distance
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-sand-100 bg-white p-4">
+        <div className="flex flex-col">
+          <span className="text-sm font-semibold text-brown-800">
+            {currentStep.label}
+          </span>
+          <span className="text-[11px] font-semibold text-brown-700/40 uppercase tracking-wider">
+            {currentStep.scale} scale
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Decrease button */}
+          <button
+            type="button"
+            onClick={handleDecrease}
+            disabled={currentIndex <= 0}
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-sand-200 text-brown-700 hover:bg-cream-50 active:bg-cream-100 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+            title="Decrease text size"
+            aria-label="Decrease text size"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
+              <path d="M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+          </button>
+
+          {/* Scale steps indicators */}
+          <div className="flex items-center gap-1.5 px-1">
+            {FONT_SIZE_STEPS.map((step, idx) => (
+              <button
+                key={step.value}
+                type="button"
+                onClick={() => {
+                  setFontSize(step.value)
+                  localStorage.setItem(LOCAL_STORAGE_KEY, step.value)
+                  applyFontSize(step.value)
+                }}
+                className={`h-2 rounded-full transition-all duration-200 ${
+                  idx === currentIndex
+                    ? 'w-5 bg-terracotta-500'
+                    : 'w-2 bg-sand-200 hover:bg-sand-300'
+                }`}
+                title={`Set to ${step.label}`}
+                aria-label={`Set font size to ${step.label}`}
+              />
+            ))}
+          </div>
+
+          {/* Increase button */}
+          <button
+            type="button"
+            onClick={handleIncrease}
+            disabled={currentIndex >= FONT_SIZE_STEPS.length - 1}
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-sand-200 text-brown-700 hover:bg-cream-50 active:bg-cream-100 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+            title="Increase text size"
+            aria-label="Increase text size"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
+              <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
