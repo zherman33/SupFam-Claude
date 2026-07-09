@@ -325,7 +325,7 @@ Deno.serve(async (req) => {
             let uid = ev.UID?.trim()
             if (!uid) {
               const title = unescapeIcsText(ev.SUMMARY) || "(No title)"
-              const startInfo = parseIcsDate(ev.DTSTART)
+              const startInfo = parseIcsDate(ev.DTSTART, ev.DTSTART_TZID)
               const startAt = startInfo ? startInfo.iso : ""
               uid = `ics_gen_${btoa(startAt + title).slice(0, 32)}`
             }
@@ -345,7 +345,7 @@ Deno.serve(async (req) => {
             // Gather exclusion dates from master's EXDATE and exceptions' RECURRENCE-ID
             const exDates = parseExDates(masterEvent.EXDATE)
             for (const exc of exceptions) {
-              const recIdInfo = parseIcsDate(exc["RECURRENCE-ID"])
+              const recIdInfo = parseIcsDate(exc["RECURRENCE-ID"], exc["RECURRENCE-ID_TZID"])
               if (recIdInfo) {
                 exDates.add(recIdInfo.iso.slice(0, 10))
               }
@@ -353,8 +353,8 @@ Deno.serve(async (req) => {
 
             // Process master event (recurring expansion or single event)
             if (!isMasterCancelled) {
-              const startInfo = parseIcsDate(masterEvent.DTSTART)
-              const endInfo = parseIcsDate(masterEvent.DTEND)
+              const startInfo = parseIcsDate(masterEvent.DTSTART, masterEvent.DTSTART_TZID)
+              const endInfo = parseIcsDate(masterEvent.DTEND, masterEvent.DTEND_TZID)
 
               if (startInfo) {
                 const startAt = startInfo.iso
@@ -410,8 +410,8 @@ Deno.serve(async (req) => {
               const isExcCancelled = excStatus === "CANCELLED" || excStatus === "CANCELED"
               if (isExcCancelled) continue
 
-              const startInfo = parseIcsDate(exc.DTSTART)
-              const endInfo = parseIcsDate(exc.DTEND)
+              const startInfo = parseIcsDate(exc.DTSTART, exc.DTSTART_TZID)
+              const endInfo = parseIcsDate(exc.DTEND, exc.DTEND_TZID)
               if (!startInfo) continue
 
               const startAt = startInfo.iso
@@ -423,7 +423,7 @@ Deno.serve(async (req) => {
               const description = unescapeIcsText(exc.DESCRIPTION) || unescapeIcsText(masterEvent.DESCRIPTION) || null
               const location = unescapeIcsText(exc.LOCATION) || unescapeIcsText(masterEvent.LOCATION) || null
 
-              const recIdInfo = parseIcsDate(exc["RECURRENCE-ID"])
+              const recIdInfo = parseIcsDate(exc["RECURRENCE-ID"], exc["RECURRENCE-ID_TZID"])
               if (!recIdInfo) continue
               const excDateStr = recIdInfo.iso.slice(0, 10)
               const externalId = `${uid}_${excDateStr}`
@@ -550,6 +550,13 @@ function parseIcs(icsText: string): any[] {
         if (params.includes("VALUE=DATE")) {
           currentEvent[`${key}_ALLDAY`] = "true"
         }
+
+        if (params) {
+          const tzidMatch = /TZID=([^;]+)/i.exec(params)
+          if (tzidMatch) {
+            currentEvent[`${key}_TZID`] = tzidMatch[1].trim()
+          }
+        }
       }
     }
   }
@@ -666,7 +673,44 @@ function expandIcsRRule(
   return instances
 }
 
-function parseIcsDate(str: string | undefined): { iso: string; allDay: boolean } | null {
+function convertLocalToUtc(localIso: string, timeZone: string): string {
+  // localIso is "YYYY-MM-DDTHH:mm:ss"
+  const d = new Date(localIso + "Z")
+  
+  // Format elements explicitly to ensure en-US format
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+    hour12: false
+  })
+  
+  const parts = formatter.formatToParts(d)
+  const map: Record<string, string> = {}
+  for (const part of parts) {
+    map[part.type] = part.value
+  }
+  
+  const year = map.year
+  const month = map.month.padStart(2, "0")
+  const day = map.day.padStart(2, "0")
+  const hour = map.hour === "24" ? "00" : map.hour.padStart(2, "0")
+  const minute = map.minute.padStart(2, "0")
+  const second = map.second.padStart(2, "0")
+  
+  const localTzIso = `${year}-${month}-${day}T${hour}:${minute}:${second}Z`
+  const localDate = new Date(localTzIso)
+  
+  const offset = localDate.getTime() - d.getTime()
+  const utcDate = new Date(d.getTime() - offset)
+  return utcDate.toISOString()
+}
+
+function parseIcsDate(str: string | undefined, tzId?: string): { iso: string; allDay: boolean } | null {
   if (!str) return null
   const clean = str.trim()
   
@@ -682,7 +726,19 @@ function parseIcsDate(str: string | undefined): { iso: string; allDay: boolean }
   const match = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?/.exec(clean)
   if (match) {
     const [_, y, m, d, hr, mn, sc, z] = match
-    return { iso: `${y}-${m}-${d}T${hr}:${mn}:${sc}Z`, allDay: false }
+    const localIso = `${y}-${m}-${d}T${hr}:${mn}:${sc}`
+    if (z) {
+      return { iso: `${localIso}Z`, allDay: false }
+    }
+    
+    try {
+      const targetTz = tzId || "America/New_York"
+      const utcIso = convertLocalToUtc(localIso, targetTz)
+      return { iso: utcIso, allDay: false }
+    } catch (err) {
+      console.error(`Error converting timezone ${tzId || "America/New_York"} for ${localIso}:`, err)
+      return { iso: `${localIso}Z`, allDay: false }
+    }
   }
 
   const parsed = new Date(clean)
