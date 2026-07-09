@@ -319,55 +319,136 @@ Deno.serve(async (req) => {
           const rawEvents = parseIcs(icsText)
           const fetchedIds: string[] = []
 
+          // Group VEVENTs by UID to associate recurring master events with their exceptions
+          const eventsByUid = new Map<string, any[]>()
           for (const ev of rawEvents) {
-            const title = unescapeIcsText(ev.SUMMARY) || "(No title)"
-            const description = unescapeIcsText(ev.DESCRIPTION) || null
-            const location = unescapeIcsText(ev.LOCATION) || null
+            let uid = ev.UID?.trim()
+            if (!uid) {
+              const title = unescapeIcsText(ev.SUMMARY) || "(No title)"
+              const startInfo = parseIcsDate(ev.DTSTART)
+              const startAt = startInfo ? startInfo.iso : ""
+              uid = `ics_gen_${btoa(startAt + title).slice(0, 32)}`
+            }
+            if (!eventsByUid.has(uid)) {
+              eventsByUid.set(uid, [])
+            }
+            eventsByUid.get(uid)!.push(ev)
+          }
 
-            const isAllDay = ev.DTSTART_ALLDAY === "true" || ev.DTEND_ALLDAY === "true"
-            const startInfo = parseIcsDate(ev.DTSTART)
-            const endInfo = parseIcsDate(ev.DTEND)
+          for (const [uid, group] of eventsByUid.entries()) {
+            const masterEvent = group.find((ev) => ev.RRULE || !ev["RECURRENCE-ID"]) || group[0]
+            const exceptions = group.filter((ev) => ev !== masterEvent && ev["RECURRENCE-ID"])
 
-            if (!startInfo) continue
+            const masterStatus = masterEvent.STATUS?.trim().toUpperCase()
+            const isMasterCancelled = masterStatus === "CANCELLED" || masterStatus === "CANCELED"
 
-            const startAt = startInfo.iso
-            const endAt = endInfo ? endInfo.iso : startAt
-            const allDay = startInfo.allDay || isAllDay
-
-            // Check for recurring rule (RRULE) or single event within active window
-            const occurrences = ev.RRULE
-              ? expandIcsRRule(startAt, endAt, ev.RRULE, timeMin, timeMax)
-              : []
-
-            if (occurrences.length === 0) {
-              const eventStartDate = new Date(startAt)
-              if (eventStartDate >= timeMin && eventStartDate <= timeMax) {
-                occurrences.push({ startAt, endAt, instanceIdSuffix: "" })
+            // Gather exclusion dates from master's EXDATE and exceptions' RECURRENCE-ID
+            const exDates = parseExDates(masterEvent.EXDATE)
+            for (const exc of exceptions) {
+              const recIdInfo = parseIcsDate(exc["RECURRENCE-ID"])
+              if (recIdInfo) {
+                exDates.add(recIdInfo.iso.slice(0, 10))
               }
             }
 
-            for (const occ of occurrences) {
-              const baseId = ev.UID ? ev.UID.trim() : `ics_gen_${btoa(startAt + title).slice(0, 32)}`
-              const externalId = baseId + occ.instanceIdSuffix
+            // Process master event (recurring expansion or single event)
+            if (!isMasterCancelled) {
+              const startInfo = parseIcsDate(masterEvent.DTSTART)
+              const endInfo = parseIcsDate(masterEvent.DTEND)
 
-              await supabase.from("calendar_events").upsert(
-                {
-                  family_id: member.family_id,
-                  source_calendar_id: cal.calendar_id,
-                  external_event_id: externalId,
-                  title,
-                  description,
-                  location,
-                  start_at: occ.startAt,
-                  end_at: occ.endAt,
-                  all_day: allDay,
-                  color: cal.color ?? "#C4714F",
-                  created_by: cal.family_member_id,
-                },
-                { onConflict: "family_id,external_event_id" }
-              )
+              if (startInfo) {
+                const startAt = startInfo.iso
+                const endAt = endInfo ? endInfo.iso : startAt
+                const isAllDay = masterEvent.DTSTART_ALLDAY === "true" || masterEvent.DTEND_ALLDAY === "true"
+                const allDay = startInfo.allDay || isAllDay
 
-              fetchedIds.push(externalId)
+                const occurrences = masterEvent.RRULE
+                  ? expandIcsRRule(startAt, endAt, masterEvent.RRULE, timeMin, timeMax, exDates)
+                  : []
+
+                if (!masterEvent.RRULE) {
+                  const eventStartDate = new Date(startAt)
+                  if (eventStartDate >= timeMin && eventStartDate <= timeMax) {
+                    const dateStr = startAt.slice(0, 10)
+                    if (!exDates.has(dateStr)) {
+                      occurrences.push({ startAt, endAt, instanceIdSuffix: "" })
+                    }
+                  }
+                }
+
+                for (const occ of occurrences) {
+                  const title = unescapeIcsText(masterEvent.SUMMARY) || "(No title)"
+                  const description = unescapeIcsText(masterEvent.DESCRIPTION) || null
+                  const location = unescapeIcsText(masterEvent.LOCATION) || null
+                  const externalId = uid + occ.instanceIdSuffix
+
+                  await supabase.from("calendar_events").upsert(
+                    {
+                      family_id: member.family_id,
+                      source_calendar_id: cal.calendar_id,
+                      external_event_id: externalId,
+                      title,
+                      description,
+                      location,
+                      start_at: occ.startAt,
+                      end_at: occ.endAt,
+                      all_day: allDay,
+                      color: cal.color ?? "#C4714F",
+                      created_by: cal.family_member_id,
+                    },
+                    { onConflict: "family_id,external_event_id" }
+                  )
+
+                  fetchedIds.push(externalId)
+                }
+              }
+            }
+
+            // Process exceptions (modified instances)
+            for (const exc of exceptions) {
+              const excStatus = exc.STATUS?.trim().toUpperCase()
+              const isExcCancelled = excStatus === "CANCELLED" || excStatus === "CANCELED"
+              if (isExcCancelled) continue
+
+              const startInfo = parseIcsDate(exc.DTSTART)
+              const endInfo = parseIcsDate(exc.DTEND)
+              if (!startInfo) continue
+
+              const startAt = startInfo.iso
+              const endAt = endInfo ? endInfo.iso : startAt
+              const isAllDay = exc.DTSTART_ALLDAY === "true" || exc.DTEND_ALLDAY === "true"
+              const allDay = startInfo.allDay || isAllDay
+
+              const title = unescapeIcsText(exc.SUMMARY) || unescapeIcsText(masterEvent.SUMMARY) || "(No title)"
+              const description = unescapeIcsText(exc.DESCRIPTION) || unescapeIcsText(masterEvent.DESCRIPTION) || null
+              const location = unescapeIcsText(exc.LOCATION) || unescapeIcsText(masterEvent.LOCATION) || null
+
+              const recIdInfo = parseIcsDate(exc["RECURRENCE-ID"])
+              if (!recIdInfo) continue
+              const excDateStr = recIdInfo.iso.slice(0, 10)
+              const externalId = `${uid}_${excDateStr}`
+
+              const eventStartDate = new Date(startAt)
+              if (eventStartDate >= timeMin && eventStartDate <= timeMax) {
+                await supabase.from("calendar_events").upsert(
+                  {
+                    family_id: member.family_id,
+                    source_calendar_id: cal.calendar_id,
+                    external_event_id: externalId,
+                    title,
+                    description,
+                    location,
+                    start_at: startAt,
+                    end_at: endAt,
+                    all_day: allDay,
+                    color: cal.color ?? "#C4714F",
+                    created_by: cal.family_member_id,
+                  },
+                  { onConflict: "family_id,external_event_id" }
+                )
+
+                fetchedIds.push(externalId)
+              }
             }
           }
 
@@ -456,7 +537,16 @@ function parseIcs(icsText: string): any[] {
           params = key.slice(semiIdx + 1)
           key = key.slice(0, semiIdx)
         }
-        currentEvent[key] = value
+        
+        if (key === "EXDATE") {
+          if (!currentEvent[key]) {
+            currentEvent[key] = []
+          }
+          currentEvent[key].push(value)
+        } else {
+          currentEvent[key] = value
+        }
+
         if (params.includes("VALUE=DATE")) {
           currentEvent[`${key}_ALLDAY`] = "true"
         }
@@ -466,12 +556,33 @@ function parseIcs(icsText: string): any[] {
   return events
 }
 
+function parseExDates(exdateProp: any): Set<string> {
+  const dates = new Set<string>()
+  if (!exdateProp) return dates
+  
+  const propArray = Array.isArray(exdateProp) ? exdateProp : [exdateProp]
+  for (const propValue of propArray) {
+    const parts = propValue.split(",")
+    for (const part of parts) {
+      const clean = part.trim()
+      if (!clean) continue
+      const dateMatch = /^(\d{4})(\d{2})(\d{2})/.exec(clean)
+      if (dateMatch) {
+        const [_, y, m, d] = dateMatch
+        dates.add(`${y}-${m}-${d}`)
+      }
+    }
+  }
+  return dates
+}
+
 function expandIcsRRule(
   startIso: string,
   endIso: string,
   rruleStr: string,
   timeMin: Date,
-  timeMax: Date
+  timeMax: Date,
+  exDates?: Set<string>
 ): Array<{ startAt: string; endAt: string; instanceIdSuffix: string }> {
   const instances: Array<{ startAt: string; endAt: string; instanceIdSuffix: string }> = []
   const startDate = new Date(startIso)
@@ -537,12 +648,15 @@ function expandIcsRRule(
       occurrencesFound++
       if (current >= timeMin && current <= timeMax) {
         const instStart = new Date(current)
-        const instEnd = new Date(current.getTime() + durationMs)
-        instances.push({
-          startAt: instStart.toISOString(),
-          endAt: instEnd.toISOString(),
-          instanceIdSuffix: `_${instStart.toISOString().slice(0, 10)}`,
-        })
+        const dateStr = instStart.toISOString().slice(0, 10)
+        if (!exDates || !exDates.has(dateStr)) {
+          const instEnd = new Date(current.getTime() + durationMs)
+          instances.push({
+            startAt: instStart.toISOString(),
+            endAt: instEnd.toISOString(),
+            instanceIdSuffix: `_${dateStr}`,
+          })
+        }
       }
     }
 
