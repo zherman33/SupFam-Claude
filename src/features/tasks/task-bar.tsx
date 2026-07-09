@@ -190,7 +190,9 @@ function TaskChip({
   return (
     <div
       onClick={onSelect}
-      className={`group flex h-7 flex-shrink-0 items-center gap-1.5 rounded-full border pl-2 pr-1 text-xs transition-colors hover:brightness-95 ${
+      className={`group flex h-7 flex-shrink-0 items-center gap-1.5 rounded-full border pl-2 ${
+        hovered ? 'pr-2' : 'pr-3'
+      } text-xs transition-colors hover:brightness-95 ${
         onSelect ? 'cursor-pointer' : ''
       }`}
       style={{
