@@ -123,7 +123,7 @@ function TodayTaskRow({
   return (
     <div
       onClick={onSelect}
-      className={`flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-cream-100 ${
+      className={`flex items-start gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-cream-100 ${
         overdue ? 'bg-red-50/50 border border-red-100' : ''
       } ${onSelect ? 'cursor-pointer' : ''}`}
     >
@@ -132,16 +132,16 @@ function TodayTaskRow({
           e.stopPropagation()
           onToggle()
         }}
-        className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 border-sand-400 transition-colors hover:border-terracotta-400"
+        className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 border-sand-400 transition-colors hover:border-terracotta-400 mt-[1px]"
       />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm text-brown-800">{task.title}</p>
+        <p className="break-words whitespace-normal text-sm text-brown-800">{task.title}</p>
         {task.assigned_member && (
           <p className="text-xs text-brown-700/50">{task.assigned_member.display_name}</p>
         )}
       </div>
       {overdue && task.due_date && (
-        <span className="text-xs text-red-400">
+        <span className="text-xs text-red-400 mt-[1px]">
           {format(parseISO(task.due_date), 'MMM d')}
         </span>
       )}

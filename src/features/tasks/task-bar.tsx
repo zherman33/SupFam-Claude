@@ -216,7 +216,7 @@ function TaskChip({
         </svg>
       </button>
 
-      <span className="max-w-[140px] truncate font-medium">{task.title}</span>
+      <span className="font-medium whitespace-nowrap">{task.title}</span>
 
       {task.due_date && (
         <span

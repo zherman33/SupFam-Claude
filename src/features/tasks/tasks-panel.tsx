@@ -220,7 +220,7 @@ function TaskRow({
   return (
     <div
       onClick={onSelect}
-      className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors ${
+      className={`group flex items-start gap-3 rounded-lg px-3 py-2.5 transition-colors ${
         task.is_complete ? 'opacity-50' : 'hover:bg-cream-100'
       } ${onSelect ? 'cursor-pointer' : ''}`}
       onMouseEnter={() => setHovered(true)}
@@ -231,7 +231,7 @@ function TaskRow({
           e.stopPropagation()
           onToggle()
         }}
-        className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+        className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors mt-[1px] ${
           task.is_complete
             ? 'border-terracotta-400 bg-terracotta-400'
             : 'border-sand-400 hover:border-terracotta-400'
@@ -245,7 +245,7 @@ function TaskRow({
       </button>
 
       <div className="min-w-0 flex-1">
-        <p className={`truncate text-sm ${task.is_complete ? 'line-through text-brown-700/50' : 'text-brown-800'}`}>
+        <p className={`break-words whitespace-normal text-sm ${task.is_complete ? 'line-through text-brown-700/50' : 'text-brown-800'}`}>
           {task.title}
         </p>
         <div className="flex items-center gap-2">
@@ -267,7 +267,7 @@ function TaskRow({
             e.stopPropagation()
             onDelete()
           }}
-          className="flex-shrink-0 rounded p-1 text-brown-700/30 hover:text-red-400"
+          className="flex-shrink-0 rounded p-1 text-brown-700/30 hover:text-red-400 mt-[1px]"
         >
           <svg className="h-3.5 w-3.5" viewBox="0 0 14 14" fill="none">
             <path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />

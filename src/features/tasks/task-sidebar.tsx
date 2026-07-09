@@ -278,7 +278,7 @@ function TaskRow({
   return (
     <li
       onClick={onSelect}
-      className={`group flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors ${
+      className={`group flex items-start gap-2.5 rounded-lg px-2 py-2 transition-colors ${
         onSelect ? 'cursor-pointer hover:bg-cream-100' : 'hover:bg-cream-100'
       }`}
     >
@@ -288,7 +288,7 @@ function TaskRow({
           e.stopPropagation()
           onToggle()
         }}
-        className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors hover:bg-terracotta-500/10"
+        className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors hover:bg-terracotta-500/10 mt-[1px]"
         style={{ borderColor: `${color}70` }}
         title="Mark complete"
       >
@@ -308,14 +308,14 @@ function TaskRow({
       </button>
 
       {/* Title */}
-      <span className="flex-1 min-w-0 truncate text-sm text-brown-900">
+      <span className="flex-1 min-w-0 break-words whitespace-normal text-sm text-brown-900">
         {task.title}
       </span>
 
       {/* Due date (scheduled section only) */}
       {showDate && task.due_date && (
         <span
-          className={`flex-shrink-0 text-[11px] tabular-nums font-medium ${
+          className={`flex-shrink-0 text-[11px] tabular-nums font-medium mt-[1px] ${
             isOverdue ? 'text-red-500' : 'text-brown-700/45'
           }`}
         >
@@ -330,7 +330,7 @@ function TaskRow({
           e.stopPropagation()
           onDelete()
         }}
-        className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full text-brown-700/25 opacity-0 group-hover:opacity-100 hover:text-brown-700/60 transition-all"
+        className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full text-brown-700/25 opacity-0 group-hover:opacity-100 hover:text-brown-700/60 transition-all mt-[1px]"
         title="Delete"
       >
         <svg className="h-2.5 w-2.5" viewBox="0 0 10 10" fill="none">

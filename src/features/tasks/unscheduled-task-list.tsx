@@ -83,8 +83,8 @@ export function UnscheduledTaskList({
 
         const baseClasses =
           variant === 'sidebar'
-            ? 'group relative flex items-center gap-2 rounded-lg px-2 py-1.5 transition-all select-none'
-            : 'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all select-none'
+            ? 'group relative flex items-start gap-2 rounded-lg px-2 py-2 transition-all select-none'
+            : 'group relative flex items-start gap-3 rounded-lg px-3 py-2.5 transition-all select-none'
 
         const cursorClass = onSelect ? 'cursor-pointer' : ''
 
@@ -121,7 +121,7 @@ export function UnscheduledTaskList({
             {/* Grip handle for drag reorder */}
             <div
               onClick={(e) => e.stopPropagation()}
-              className="flex items-center justify-center p-0.5 cursor-grab active:cursor-grabbing text-brown-700/30 group-hover:text-brown-700/60 hover:text-brown-700 transition-colors"
+              className="flex items-center justify-center p-0.5 cursor-grab active:cursor-grabbing text-brown-700/30 group-hover:text-brown-700/60 hover:text-brown-700 transition-colors mt-[3px]"
               title="Drag to reorder"
             >
               <svg className="h-3.5 w-2.5 flex-shrink-0" viewBox="0 0 8 12" fill="currentColor">
@@ -140,7 +140,7 @@ export function UnscheduledTaskList({
                 e.stopPropagation()
                 onToggle(task)
               }}
-              className={`flex flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors hover:bg-terracotta-500/10 ${
+              className={`flex flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors hover:bg-terracotta-500/10 mt-[1px] ${
                 variant === 'sidebar' ? 'h-[18px] w-[18px]' : 'h-5 w-5'
               }`}
               style={{ borderColor: `${color}70` }}
@@ -163,14 +163,14 @@ export function UnscheduledTaskList({
             {/* Title */}
             <div className="flex-1 min-w-0">
               <span
-                className={`block truncate text-brown-900 ${
+                className={`block break-words whitespace-normal text-brown-900 ${
                   variant === 'sidebar' ? 'text-sm' : 'text-sm font-medium'
                 }`}
               >
                 {task.title}
               </span>
               {variant === 'panel' && task.assigned_member && (
-                <span className="text-xs text-brown-700/50">→ {task.assigned_member.display_name}</span>
+                <span className="text-xs text-brown-700/50 block mt-0.5">→ {task.assigned_member.display_name}</span>
               )}
             </div>
 
@@ -180,7 +180,7 @@ export function UnscheduledTaskList({
                 e.stopPropagation()
                 onDelete(task)
               }}
-              className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-brown-700/25 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all"
+              className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-brown-700/25 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all mt-[1px]"
               title="Delete"
             >
               <svg className="h-2.5 w-2.5" viewBox="0 0 10 10" fill="none">
