@@ -673,6 +673,49 @@ function expandIcsRRule(
   return instances
 }
 
+const WINDOWS_TO_IANA: Record<string, string> = {
+  "Eastern Standard Time": "America/New_York",
+  "Eastern Daylight Time": "America/New_York",
+  "EST": "America/New_York",
+  "EDT": "America/New_York",
+  "Central Standard Time": "America/Chicago",
+  "Central Daylight Time": "America/Chicago",
+  "CST": "America/Chicago",
+  "CDT": "America/Chicago",
+  "Mountain Standard Time": "America/Denver",
+  "Mountain Daylight Time": "America/Denver",
+  "MST": "America/Denver",
+  "MDT": "America/Denver",
+  "Pacific Standard Time": "America/Los_Angeles",
+  "Pacific Daylight Time": "America/Los_Angeles",
+  "PST": "America/Los_Angeles",
+  "PDT": "America/Los_Angeles",
+  "Alaskan Standard Time": "America/Anchorage",
+  "Hawaiian Standard Time": "America/Adak",
+  "Hawaii Standard Time": "America/Honolulu",
+  "GMT Standard Time": "Europe/London",
+  "Greenwich Standard Time": "Europe/London",
+  "W. Europe Standard Time": "Europe/Berlin",
+  "Central Europe Standard Time": "Europe/Belgrade",
+  "Romance Standard Time": "Europe/Paris",
+  "UTC": "UTC",
+  "GMT": "GMT",
+}
+
+function normalizeTimeZone(tz: string): string {
+  const trimmed = tz.trim()
+  if (WINDOWS_TO_IANA[trimmed]) {
+    return WINDOWS_TO_IANA[trimmed]
+  }
+  const lower = trimmed.toLowerCase()
+  for (const [win, iana] of Object.entries(WINDOWS_TO_IANA)) {
+    if (win.toLowerCase() === lower) {
+      return iana
+    }
+  }
+  return trimmed
+}
+
 function convertLocalToUtc(localIso: string, timeZone: string): string {
   // localIso is "YYYY-MM-DDTHH:mm:ss"
   const d = new Date(localIso + "Z")
@@ -731,13 +774,21 @@ function parseIcsDate(str: string | undefined, tzId?: string): { iso: string; al
       return { iso: `${localIso}Z`, allDay: false }
     }
     
+    // Normalize timeZone name (e.g. convert "Eastern Standard Time" to "America/New_York")
+    const targetTz = tzId ? normalizeTimeZone(tzId) : "America/New_York"
+    
     try {
-      const targetTz = tzId || "America/New_York"
       const utcIso = convertLocalToUtc(localIso, targetTz)
       return { iso: utcIso, allDay: false }
     } catch (err) {
-      console.error(`Error converting timezone ${tzId || "America/New_York"} for ${localIso}:`, err)
-      return { iso: `${localIso}Z`, allDay: false }
+      console.error(`Error converting timezone ${targetTz} for ${localIso}:`, err)
+      // Fallback: Try converting using the family's default timezone "America/New_York"
+      try {
+        const utcIso = convertLocalToUtc(localIso, "America/New_York")
+        return { iso: utcIso, allDay: false }
+      } catch {
+        return { iso: `${localIso}Z`, allDay: false }
+      }
     }
   }
 
