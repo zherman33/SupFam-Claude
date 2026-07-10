@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { SystemSettings } from '@/lib/system-settings'
 import {
   useEventColorRules,
   useCreateEventColorRule,
@@ -62,6 +63,7 @@ export function AdvancedSettings({ onClose }: { onClose: () => void }) {
         <div className="flex-1 overflow-y-auto divide-y divide-sand-100">
           <ConnectedCalendarColorsSection />
           <FontSizeSettingsSection />
+          <DeviceSettingsSection />
           <EventColorRulesSection />
         </div>
       </div>
@@ -637,6 +639,163 @@ function FontSizeSettingsSection() {
             <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
               <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
             </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DeviceSettingsSection() {
+  const [keepScreenOn, setKeepScreenOn] = useState(false)
+  const [immersiveMode, setImmersiveMode] = useState(false)
+  const [brightness, setBrightness] = useState<number>(-1.0) // -1.0 means default
+
+  useEffect(() => {
+    async function loadState() {
+      const state = await SystemSettings.getSettingsState()
+      setKeepScreenOn(state.keepScreenOn)
+      setImmersiveMode(state.immersiveMode)
+      setBrightness(state.brightness)
+    }
+    loadState()
+  }, [])
+
+  const handleToggleKeepScreen = async () => {
+    const nextVal = !keepScreenOn
+    setKeepScreenOn(nextVal)
+    await SystemSettings.setKeepScreenOn(nextVal)
+  }
+
+  const handleToggleImmersive = async () => {
+    const nextVal = !immersiveMode
+    setImmersiveMode(nextVal)
+    await SystemSettings.setImmersiveMode(nextVal)
+  }
+
+  const handleBrightnessChange = async (val: number) => {
+    setBrightness(val)
+    await SystemSettings.setBrightness(val)
+  }
+
+  return (
+    <div className="p-6">
+      <div className="mb-4">
+        <p className="text-sm font-semibold text-brown-800">Ambient display & device settings</p>
+        <p className="text-xs text-brown-700/50 mt-0.5">
+          Configure screen behavior and settings for your kitchen always-on dashboard
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        {/* Keep screen awake toggle */}
+        <div className="flex items-center justify-between rounded-xl border border-sand-100 bg-white p-3.5">
+          <div className="flex flex-col gap-0.5 pr-2">
+            <span className="text-sm font-semibold text-brown-800">Always-on display</span>
+            <span className="text-xs text-brown-700/50">Prevent the screen from sleeping or turning off</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleToggleKeepScreen}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+              keepScreenOn ? 'bg-terracotta-500' : 'bg-sand-200'
+            }`}
+            role="switch"
+            aria-checked={keepScreenOn}
+          >
+            <span
+              aria-hidden="true"
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                keepScreenOn ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+
+        {/* Immersive fullscreen toggle */}
+        <div className="flex items-center justify-between rounded-xl border border-sand-100 bg-white p-3.5">
+          <div className="flex flex-col gap-0.5 pr-2">
+            <span className="text-sm font-semibold text-brown-800">Immersive fullscreen</span>
+            <span className="text-xs text-brown-700/50">Hide status bars and gesture navigation lines</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleToggleImmersive}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+              immersiveMode ? 'bg-terracotta-500' : 'bg-sand-200'
+            }`}
+            role="switch"
+            aria-checked={immersiveMode}
+          >
+            <span
+              aria-hidden="true"
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                immersiveMode ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+
+        {/* Brightness scale */}
+        <div className="rounded-xl border border-sand-100 bg-white p-3.5 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm font-semibold text-brown-800">App brightness</span>
+              <span className="text-xs text-brown-700/50">Dim or brighten the ambient dashboard</span>
+            </div>
+            <span className="text-xs font-semibold text-brown-700/60 uppercase tracking-wider">
+              {brightness === -1.0 ? 'Default' : `${Math.round(brightness * 100)}%`}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => handleBrightnessChange(-1.0)}
+              className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-all ${
+                brightness === -1.0
+                  ? 'bg-brown-800 border-brown-800 text-cream-50'
+                  : 'bg-white border-sand-200 text-brown-700 hover:bg-cream-50'
+              }`}
+            >
+              Auto/Default
+            </button>
+            <input
+              type="range"
+              min="0.1"
+              max="1.0"
+              step="0.05"
+              value={brightness === -1.0 ? 1.0 : brightness}
+              disabled={brightness === -1.0}
+              onChange={(e) => handleBrightnessChange(parseFloat(e.target.value))}
+              className="flex-1 h-1.5 bg-sand-100 rounded-lg appearance-none cursor-pointer accent-terracotta-500 disabled:opacity-30 disabled:cursor-not-allowed"
+            />
+          </div>
+        </div>
+
+        {/* Shortcut buttons */}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => SystemSettings.openSystemSettings('display')}
+            className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-sand-200 bg-white px-3 py-2.5 text-xs font-semibold text-brown-700 hover:bg-cream-50 active:bg-cream-100 transition-colors"
+          >
+            <svg className="h-4 w-4 text-brown-700/40" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="4" stroke="currentColor" strokeWidth="1.5"/>
+              <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+            Display Settings
+          </button>
+          <button
+            type="button"
+            onClick={() => SystemSettings.openSystemSettings('general')}
+            className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-sand-200 bg-white px-3 py-2.5 text-xs font-semibold text-brown-700 hover:bg-cream-50 active:bg-cream-100 transition-colors"
+          >
+            <svg className="h-4 w-4 text-brown-700/40" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.5"/>
+              <path d="M8 2v1M8 13v1M2 8h1M13 8h1M3.5 3.5l.7.7M11.8 11.8l.7.7M3.5 12.5l.7-.7M11.8 4.2l.7-.7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+            Device Settings
           </button>
         </div>
       </div>

@@ -12,6 +12,7 @@ import { NotesPanel } from '@/features/notes/notes-panel'
 import { useTasks, useSyncTasks, type Task } from '@/features/tasks/use-tasks'
 import { TaskForm } from '@/features/tasks/task-form'
 import { useCalendarEvents, useSyncCalendars } from '@/features/calendar/use-calendar'
+import { SystemSettings } from '@/lib/system-settings'
 
 type Drawer = 'grocery' | 'notes' | null
 
@@ -34,6 +35,28 @@ export function Dashboard() {
 
   const familyName = member?.families?.name ?? 'Your Family'
   const inviteCode = member?.families?.invite_code
+
+  // Apply device/ambient display settings on mount and when returning to focus
+  useEffect(() => {
+    async function applySavedSettings() {
+      const state = await SystemSettings.getSettingsState()
+      await SystemSettings.setImmersiveMode(state.immersiveMode)
+      await SystemSettings.setKeepScreenOn(state.keepScreenOn)
+      await SystemSettings.setBrightness(state.brightness)
+    }
+
+    applySavedSettings()
+
+    const handleVisibilitySettings = () => {
+      if (document.visibilityState === 'visible') {
+        applySavedSettings()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilitySettings)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilitySettings)
+    }
+  }, [])
 
   // Auto-sync on mount, whenever the app comes back into view, and periodically every 30s while visible
   // (ensures voice-added events/tasks from Google Assistant on the Apollo display appear automatically)

@@ -119,11 +119,41 @@ export function useCalendarEvents() {
 
   const filteredData = useMemo(() => {
     if (!query.data) return undefined
-    return query.data.filter((ev) => {
+    
+    // Filter by visibility first
+    const visibleEvents = query.data.filter((ev) => {
       if (!ev.source_calendar_id) return true
       if (!knownCalendarIds.has(ev.source_calendar_id)) return true
       return visibleCalendarIds.has(ev.source_calendar_id)
     })
+
+    const seenExternalIds = new Set<string>()
+    const seenOccurrenceKeys = new Set<string>()
+    const deduped: CalendarEvent[] = []
+
+    for (const ev of visibleEvents) {
+      if (ev.external_event_id) {
+        // Direct duplicate match
+        if (seenExternalIds.has(ev.external_event_id)) {
+          continue
+        }
+        seenExternalIds.add(ev.external_event_id)
+
+        // Recurrence instance duplicate match (same base event ID on the same day)
+        // Extract base ID (e.g., "eventId" from "eventId_20260706T120000Z")
+        const baseId = ev.external_event_id.split('_')[0]
+        const eventDate = ev.start_at.slice(0, 10)
+        const occurrenceKey = `${baseId}_${eventDate}`
+
+        if (seenOccurrenceKeys.has(occurrenceKey)) {
+          continue
+        }
+        seenOccurrenceKeys.add(occurrenceKey)
+      }
+      deduped.push(ev)
+    }
+
+    return deduped
   }, [query.data, knownCalendarIds, visibleCalendarIds])
 
   return {
