@@ -10,6 +10,20 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(SystemSettingsPlugin.class);
         super.onCreate(savedInstanceState);
+
+        // Listen for system UI visibility changes to enforce immersive mode
+        getWindow().getDecorView().setOnSystemUiVisibilityChangeListener(visibility -> {
+            if (isImmersiveModeEnabled && (visibility & android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION) == 0) {
+                applyImmersiveMode();
+            }
+        });
+
+        // Listen for layout changes (e.g. WebView reloading or keyboard toggles)
+        getWindow().getDecorView().addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+            if (isImmersiveModeEnabled) {
+                applyImmersiveMode();
+            }
+        });
     }
 
     public void applyImmersiveMode() {

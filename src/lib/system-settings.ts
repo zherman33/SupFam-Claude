@@ -42,6 +42,21 @@ export const SystemSettings = {
       }
     } else {
       console.log(`[Web Fallback] setImmersiveMode: ${enabled}`);
+      try {
+        if (enabled) {
+          if (!document.fullscreenElement) {
+            await document.documentElement.requestFullscreen();
+            console.log('[Web Fallback] Fullscreen mode activated');
+          }
+        } else {
+          if (document.fullscreenElement) {
+            await document.exitFullscreen();
+            console.log('[Web Fallback] Fullscreen mode deactivated');
+          }
+        }
+      } catch (err) {
+        console.warn('[Web Fallback] HTML5 Fullscreen request failed (requires user interaction gesture):', err);
+      }
     }
   },
 
