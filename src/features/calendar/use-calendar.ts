@@ -1,6 +1,5 @@
 import { useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { format } from 'date-fns'
 import { supabase } from '@/lib/supabase'
 import { useFamilyMember } from '@/features/auth/use-family-member'
 
@@ -55,20 +54,24 @@ export function getEventDateBounds(ev: CalendarEvent): EventDateBounds {
     lastDay > firstDay
 
   if (isExclusiveEnd) {
-    const d = new Date(lastDay + 'T00:00:00')
-    d.setDate(d.getDate() - 1)
-    lastDay = format(d, 'yyyy-MM-dd')
+    const d = new Date(lastDay + 'T00:00:00Z')
+    d.setUTCDate(d.getUTCDate() - 1)
+    lastDay = d.toISOString().slice(0, 10)
   }
   if (lastDay < firstDay) lastDay = firstDay
 
   const isMultiDay = lastDay !== firstDay
   const dates: string[] = []
   let cur = firstDay
-  while (cur <= lastDay) {
+  let iterations = 0
+  const maxIterations = 366 // Prevent infinite loop in case of abnormal inputs
+
+  while (cur <= lastDay && iterations < maxIterations) {
+    iterations++
     dates.push(cur)
-    const d = new Date(cur + 'T00:00:00')
-    d.setDate(d.getDate() + 1)
-    cur = format(d, 'yyyy-MM-dd')
+    const d = new Date(cur + 'T00:00:00Z')
+    d.setUTCDate(d.getUTCDate() + 1)
+    cur = d.toISOString().slice(0, 10)
   }
 
   return { firstDay, lastDay, dates, isMultiDay }

@@ -30,6 +30,7 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
   const deleteEvent = useDeleteEvent()
 
   // ── Form state ─────────────────────────────────────────────────────────
+  const [error, setError] = useState<string | null>(null)
   const [title, setTitle] = useState(event?.title ?? '')
   const [allDay, setAllDay] = useState(event?.all_day ?? true)
   const [startDate, setStartDate] = useState(
@@ -102,12 +103,14 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
       description: description || undefined,
       location: location || undefined,
       attendee_emails: attendeeEmails.size > 0 ? Array.from(attendeeEmails) : undefined,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim() || !selectedCalendarId || !selectedMemberId) return
+    setError(null)
 
     const payload = {
       event: buildEventPayload(),
@@ -115,12 +118,17 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
       familyMemberId: selectedMemberId,
     }
 
-    if (isEdit) {
-      await updateEvent.mutateAsync(payload)
-    } else {
-      await createEvent.mutateAsync(payload)
+    try {
+      if (isEdit) {
+        await updateEvent.mutateAsync(payload)
+      } else {
+        await createEvent.mutateAsync(payload)
+      }
+      onClose()
+    } catch (err: any) {
+      console.error('Error saving event:', err)
+      setError(err?.message || "Hmm, that didn't work — try again?")
     }
-    onClose()
   }
 
   const handleDelete = async () => {
@@ -365,6 +373,13 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
             </div>
 
           </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="px-5 py-2.5 text-xs font-semibold text-red-600 bg-red-50 border-t border-b border-red-100 flex-shrink-0">
+              {error}
+            </div>
+          )}
 
           {/* Submit */}
           <div className="px-5 pb-6 pt-2 flex-shrink-0 border-t border-sand-100 bg-white">
