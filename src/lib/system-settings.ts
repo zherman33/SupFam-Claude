@@ -130,24 +130,35 @@ export const SystemSettings = {
   },
 
   async getSettingsState(): Promise<{ keepScreenOn: boolean; brightness: number; immersiveMode: boolean }> {
+    const keepScreenOnStr = localStorage.getItem('supfam_keep_screen_on');
+    const brightnessStr = localStorage.getItem('supfam_screen_brightness');
+    const immersiveModeStr = localStorage.getItem('supfam_immersive_mode');
+
+    if (keepScreenOnStr !== null || brightnessStr !== null || immersiveModeStr !== null) {
+      return {
+        keepScreenOn: keepScreenOnStr === 'true',
+        brightness: brightnessStr ? Number(brightnessStr) : -1.0,
+        immersiveMode: immersiveModeStr === 'true'
+      };
+    }
+
     if (Capacitor.isNativePlatform()) {
       try {
-        return await NativeSystemSettings.getSettingsState();
+        const nativeState = await NativeSystemSettings.getSettingsState();
+        return {
+          keepScreenOn: nativeState.keepScreenOn,
+          brightness: nativeState.brightness,
+          immersiveMode: nativeState.immersiveMode
+        };
       } catch (err) {
-        console.error('Failed to get settings state:', err);
+        console.error('Failed to get native settings state:', err);
       }
     }
-    
-    // Retrieve from localStorage or state fallbacks
-    const keepScreenOn = localStorage.getItem('supfam_keep_screen_on') === 'true';
-    const brightnessStr = localStorage.getItem('supfam_screen_brightness');
-    const brightness = brightnessStr ? Number(brightnessStr) : -1.0;
-    const immersiveMode = localStorage.getItem('supfam_immersive_mode') === 'true';
 
     return {
-      keepScreenOn,
-      brightness,
-      immersiveMode
+      keepScreenOn: false,
+      brightness: -1.0,
+      immersiveMode: false
     };
   }
 };
