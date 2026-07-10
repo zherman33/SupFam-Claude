@@ -125,6 +125,12 @@ Deno.serve(async (req) => {
       // Sync to our DB
       const { data: member } = await supabase.from("family_members").select("family_id").eq("id", family_member_id).single()
       if (member) {
+        const startAtRaw = created.start?.dateTime ?? created.start?.date ?? event.start
+        const endAtRaw = created.end?.dateTime ?? created.end?.date ?? event.end
+        const allDay = created.start?.dateTime ? false : (created.start?.date ? true : event.all_day)
+        const start_at = allDay ? `${startAtRaw.slice(0, 10)}T00:00:00+00:00` : startAtRaw
+        const end_at = endAtRaw ? (allDay ? `${endAtRaw.slice(0, 10)}T00:00:00+00:00` : endAtRaw) : null
+
         await supabase.from("calendar_events").upsert({
           family_id: member.family_id,
           source_calendar_id: calendar_id,
@@ -132,9 +138,9 @@ Deno.serve(async (req) => {
           title: event.title,
           description: event.description ?? null,
           location: event.location ?? null,
-          start_at: event.all_day ? `${event.start.slice(0,10)}T00:00:00+00:00` : event.start,
-          end_at: event.end ? (event.all_day ? `${event.end.slice(0,10)}T00:00:00+00:00` : event.end) : null,
-          all_day: event.all_day ?? false,
+          start_at,
+          end_at,
+          all_day: allDay,
           color: null,
           created_by: family_member_id,
         }, { onConflict: "family_id,external_event_id" })
@@ -149,14 +155,21 @@ Deno.serve(async (req) => {
         method: "PATCH", headers: authHeaders(accessToken), body: JSON.stringify(gEvent)
       })
       if (!res.ok) return jsonResp({ error: `Google ${res.status}: ${await res.text()}` }, 502)
+      const updated = await res.json()
+
+      const startAtRaw = updated.start?.dateTime ?? updated.start?.date ?? event.start
+      const endAtRaw = updated.end?.dateTime ?? updated.end?.date ?? event.end
+      const allDay = updated.start?.dateTime ? false : (updated.start?.date ? true : event.all_day)
+      const start_at = allDay ? `${startAtRaw.slice(0, 10)}T00:00:00+00:00` : startAtRaw
+      const end_at = endAtRaw ? (allDay ? `${endAtRaw.slice(0, 10)}T00:00:00+00:00` : endAtRaw) : null
 
       await supabase.from("calendar_events").update({
         title: event.title,
         description: event.description ?? null,
         location: event.location ?? null,
-        start_at: event.all_day ? `${event.start.slice(0,10)}T00:00:00+00:00` : event.start,
-        end_at: event.end ? (event.all_day ? `${event.end.slice(0,10)}T00:00:00+00:00` : event.end) : null,
-        all_day: event.all_day ?? false,
+        start_at,
+        end_at,
+        all_day: allDay,
       }).eq("external_event_id", event.id)
 
       return jsonResp({ success: true })
