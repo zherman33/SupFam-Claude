@@ -111,8 +111,8 @@ export function useTasks() {
   return useQuery({
     queryKey: ['tasks', member?.family_id],
     enabled: !!member?.family_id,
-    staleTime: 1000 * 30,
-    refetchInterval: 1000 * 30,
+    staleTime: 1000 * 60 * 2,
+    refetchInterval: 1000 * 60 * 5,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('tasks')
@@ -138,8 +138,8 @@ export function useTodayTasks() {
   return useQuery({
     queryKey: ['tasks-today', member?.family_id, today],
     enabled: !!member?.family_id,
-    staleTime: 1000 * 30,
-    refetchInterval: 1000 * 30,
+    staleTime: 1000 * 60 * 2,
+    refetchInterval: 1000 * 60 * 5,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('tasks')

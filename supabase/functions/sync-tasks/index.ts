@@ -212,6 +212,28 @@ Deno.serve(async (req) => {
       const tasklists: any[] = listsData.items ?? []
       let syncedCount = 0
 
+      // Pre-fetch all existing tasks for this family to eliminate sequential query loops
+      const { data: existingTasks } = await supabase
+        .from("tasks")
+        .select("id, google_task_id, title, notes, due_date, is_complete, google_tasklist_id")
+        .eq("family_id", member.family_id)
+
+      const existingByGoogleId = new Map(
+        (existingTasks ?? [])
+          .filter((t: any) => t.google_task_id)
+          .map((t: any) => [t.google_task_id, t])
+      )
+
+      const unlinkedByTitleDue = new Map(
+        (existingTasks ?? [])
+          .filter((t: any) => !t.google_task_id)
+          .map((t: any) => [`${t.title}::${t.due_date ?? ""}`, t])
+      )
+
+      const toDeleteGoogleIds: string[] = []
+      const toInsert: any[] = []
+      const toUpdateById: { id: string; data: any }[] = []
+
       for (const list of tasklists) {
         const tasksRes = await fetch(
           `${GOOGLE_TASKS_BASE}/lists/${encodeURIComponent(list.id)}/tasks?` +
@@ -230,7 +252,7 @@ Deno.serve(async (req) => {
 
         for (const gTask of gTasks) {
           if (gTask.deleted === true) {
-            await supabase.from("tasks").delete().eq("google_task_id", gTask.id)
+            toDeleteGoogleIds.push(gTask.id)
             continue
           }
 
@@ -239,53 +261,50 @@ Deno.serve(async (req) => {
           const dueDate = gTask.due ? gTask.due.substring(0, 10) : null
           const isComplete = gTask.status === "completed"
 
-          const { data: existingById } = await supabase
-            .from("tasks")
-            .select("id")
-            .eq("family_id", member.family_id)
-            .eq("google_task_id", gTask.id)
-            .maybeSingle()
-
+          const existingById = existingByGoogleId.get(gTask.id)
           if (existingById) {
-            await supabase
-              .from("tasks")
-              .update({
+            // Memory diff check
+            if (
+              existingById.title === gTask.title &&
+              (existingById.notes ?? null) === (gTask.notes ?? null) &&
+              (existingById.due_date ?? null) === dueDate &&
+              existingById.is_complete === isComplete &&
+              existingById.google_tasklist_id === list.id
+            ) {
+              syncedCount++
+              continue
+            }
+
+            toUpdateById.push({
+              id: existingById.id,
+              data: {
                 title: gTask.title,
                 notes: gTask.notes ?? null,
                 due_date: dueDate,
                 is_complete: isComplete,
                 google_tasklist_id: list.id,
-              })
-              .eq("id", existingById.id)
+              },
+            })
             syncedCount++
           } else {
-            // Check if there's an unlinked local task with exact title
-            let queryByTitle = supabase
-              .from("tasks")
-              .select("id")
-              .eq("family_id", member.family_id)
-              .is("google_task_id", null)
-              .eq("title", gTask.title)
-
-            if (dueDate) {
-              queryByTitle = queryByTitle.eq("due_date", dueDate)
-            }
-
-            const { data: existingByTitle } = await queryByTitle.maybeSingle()
+            // Check if there's an unlinked local task with exact title and due date
+            const key = `${gTask.title}::${dueDate ?? ""}`
+            const existingByTitle = unlinkedByTitleDue.get(key)
 
             if (existingByTitle) {
-              await supabase
-                .from("tasks")
-                .update({
+              unlinkedByTitleDue.delete(key) // prevent duplicate linking
+              toUpdateById.push({
+                id: existingByTitle.id,
+                data: {
                   google_task_id: gTask.id,
                   google_tasklist_id: list.id,
                   notes: gTask.notes ?? null,
                   is_complete: isComplete,
-                })
-                .eq("id", existingByTitle.id)
+                },
+              })
               syncedCount++
             } else {
-              await supabase.from("tasks").insert({
+              toInsert.push({
                 family_id: member.family_id,
                 created_by: tok.family_member_id,
                 assigned_to: tok.family_member_id,
@@ -300,6 +319,26 @@ Deno.serve(async (req) => {
             }
           }
         }
+      }
+
+      // Batch execute DB operations
+      if (toDeleteGoogleIds.length > 0) {
+        for (let i = 0; i < toDeleteGoogleIds.length; i += 200) {
+          await supabase
+            .from("tasks")
+            .delete()
+            .in("google_task_id", toDeleteGoogleIds.slice(i, i + 200))
+        }
+      }
+
+      if (toInsert.length > 0) {
+        for (let i = 0; i < toInsert.length; i += 200) {
+          await supabase.from("tasks").insert(toInsert.slice(i, i + 200))
+        }
+      }
+
+      for (const item of toUpdateById) {
+        await supabase.from("tasks").update(item.data).eq("id", item.id)
       }
 
       results.push({

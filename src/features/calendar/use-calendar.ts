@@ -85,8 +85,8 @@ export function useCalendarEvents() {
   const query = useQuery({
     queryKey: ['calendar-events', member?.family_id],
     enabled: !!member?.family_id,
-    staleTime: 1000 * 30,
-    refetchInterval: 1000 * 30,
+    staleTime: 1000 * 60 * 2,
+    refetchInterval: 1000 * 60 * 5,
     queryFn: async () => {
       // Fetch events ±5 weeks from today
       const now = new Date()

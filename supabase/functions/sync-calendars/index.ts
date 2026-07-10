@@ -186,57 +186,90 @@ Deno.serve(async (req) => {
           const eventsData = await eventsRes.json()
           const events: any[] = eventsData.items ?? []
 
-          const fetchedIds: string[] = []
-          for (const ev of events) {
-            if (ev.status === "cancelled") continue
-
-            const startAt = ev.start?.dateTime ?? ev.start?.date
-            const endAt = ev.end?.dateTime ?? ev.end?.date
-            if (!startAt) continue
-
-            const allDay = !ev.start?.dateTime
-
-            await supabase.from("calendar_events").upsert(
-              {
-                family_id: member.family_id,
-                source_calendar_id: cal.id,
-                external_event_id: ev.id,
-                title: ev.summary ?? "(No title)",
-                description: ev.description ?? null,
-                location: ev.location ?? null,
-                start_at: allDay ? `${startAt}T00:00:00Z` : startAt,
-                end_at: endAt
-                  ? allDay
-                    ? `${endAt}T00:00:00Z`
-                    : endAt
-                  : null,
-                all_day: allDay,
-                color: colorToUse,
-                created_by: tok.family_member_id,
-              },
-              { onConflict: "family_id,external_event_id" }
-            )
-
-            fetchedIds.push(ev.id)
-            eventsCount++
-          }
-
-          // Clean up deleted events
-          const { data: dbEvents } = await supabase
+          // Pre-fetch existing DB events for this calendar inside the sync window
+          const { data: existingEvents } = await supabase
             .from("calendar_events")
-            .select("id, external_event_id")
+            .select("id, external_event_id, title, description, location, start_at, end_at, all_day, color")
             .eq("family_id", member.family_id)
             .eq("source_calendar_id", cal.id)
             .gte("start_at", timeMin.toISOString())
             .lte("start_at", timeMax.toISOString())
             .not("external_event_id", "is", null)
 
-          const toDelete = (dbEvents ?? [])
+          const existingEventMap = new Map(
+            (existingEvents ?? []).map((e: any) => [e.external_event_id, e])
+          )
+
+          const fetchedIds: string[] = []
+          const toUpsert: any[] = []
+
+          for (const ev of events) {
+            if (ev.status === "cancelled") continue
+
+            const startAtRaw = ev.start?.dateTime ?? ev.start?.date
+            const endAtRaw = ev.end?.dateTime ?? ev.end?.date
+            if (!startAtRaw) continue
+
+            const allDay = !ev.start?.dateTime
+            const start_at = allDay ? `${startAtRaw}T00:00:00Z` : startAtRaw
+            const end_at = endAtRaw
+              ? allDay
+                ? `${endAtRaw}T00:00:00Z`
+                : endAtRaw
+              : null
+            const title = ev.summary ?? "(No title)"
+            const description = ev.description ?? null
+            const location = ev.location ?? null
+
+            fetchedIds.push(ev.id)
+            eventsCount++
+
+            // Memory diff: check if existing record matches exact values
+            const existing = existingEventMap.get(ev.id)
+            if (
+              existing &&
+              existing.title === title &&
+              (existing.description ?? null) === description &&
+              (existing.location ?? null) === location &&
+              existing.start_at === start_at &&
+              (existing.end_at ?? null) === end_at &&
+              existing.all_day === allDay &&
+              (existing.color ?? null) === (colorToUse ?? null)
+            ) {
+              continue
+            }
+
+            toUpsert.push({
+              family_id: member.family_id,
+              source_calendar_id: cal.id,
+              external_event_id: ev.id,
+              title,
+              description,
+              location,
+              start_at,
+              end_at,
+              all_day: allDay,
+              color: colorToUse,
+              created_by: tok.family_member_id,
+            })
+          }
+
+          // Batch upsert in chunks of 200 ONLY for changed/new events
+          for (let i = 0; i < toUpsert.length; i += 200) {
+            await supabase
+              .from("calendar_events")
+              .upsert(toUpsert.slice(i, i + 200), { onConflict: "family_id,external_event_id" })
+          }
+
+          // Clean up deleted events
+          const toDelete = (existingEvents ?? [])
             .filter((e: any) => e.external_event_id && !fetchedIds.includes(e.external_event_id))
             .map((e: any) => e.id)
 
           if (toDelete.length > 0) {
-            await supabase.from("calendar_events").delete().in("id", toDelete)
+            for (let i = 0; i < toDelete.length; i += 200) {
+              await supabase.from("calendar_events").delete().in("id", toDelete.slice(i, i + 200))
+            }
           }
         }
 
@@ -318,6 +351,21 @@ Deno.serve(async (req) => {
 
           const rawEvents = parseIcs(icsText)
           const fetchedIds: string[] = []
+          const toUpsert: any[] = []
+
+          // Pre-fetch existing DB events for this calendar inside the sync window
+          const { data: existingEvents } = await supabase
+            .from("calendar_events")
+            .select("id, external_event_id, title, description, location, start_at, end_at, all_day, color")
+            .eq("family_id", member.family_id)
+            .eq("source_calendar_id", cal.calendar_id)
+            .gte("start_at", timeMin.toISOString())
+            .lte("start_at", timeMax.toISOString())
+            .not("external_event_id", "is", null)
+
+          const existingEventMap = new Map(
+            (existingEvents ?? []).map((e: any) => [e.external_event_id, e])
+          )
 
           // Group VEVENTs by UID to associate recurring master events with their exceptions
           const eventsByUid = new Map<string, any[]>()
@@ -381,25 +429,37 @@ Deno.serve(async (req) => {
                   const description = unescapeIcsText(masterEvent.DESCRIPTION) || null
                   const location = unescapeIcsText(masterEvent.LOCATION) || null
                   const externalId = uid + occ.instanceIdSuffix
-
-                  await supabase.from("calendar_events").upsert(
-                    {
-                      family_id: member.family_id,
-                      source_calendar_id: cal.calendar_id,
-                      external_event_id: externalId,
-                      title,
-                      description,
-                      location,
-                      start_at: occ.startAt,
-                      end_at: occ.endAt,
-                      all_day: allDay,
-                      color: cal.color ?? "#C4714F",
-                      created_by: cal.family_member_id,
-                    },
-                    { onConflict: "family_id,external_event_id" }
-                  )
+                  const colorToUse = cal.color ?? "#C4714F"
 
                   fetchedIds.push(externalId)
+
+                  const existing = existingEventMap.get(externalId)
+                  if (
+                    existing &&
+                    existing.title === title &&
+                    (existing.description ?? null) === description &&
+                    (existing.location ?? null) === location &&
+                    existing.start_at === occ.startAt &&
+                    (existing.end_at ?? null) === occ.endAt &&
+                    existing.all_day === allDay &&
+                    (existing.color ?? null) === colorToUse
+                  ) {
+                    continue
+                  }
+
+                  toUpsert.push({
+                    family_id: member.family_id,
+                    source_calendar_id: cal.calendar_id,
+                    external_event_id: externalId,
+                    title,
+                    description,
+                    location,
+                    start_at: occ.startAt,
+                    end_at: occ.endAt,
+                    all_day: allDay,
+                    color: colorToUse,
+                    created_by: cal.family_member_id,
+                  })
                 }
               }
             }
@@ -427,47 +487,59 @@ Deno.serve(async (req) => {
               if (!recIdInfo) continue
               const excDateStr = recIdInfo.iso.slice(0, 10)
               const externalId = `${uid}_${excDateStr}`
+              const colorToUse = cal.color ?? "#C4714F"
 
               const eventStartDate = new Date(startAt)
               if (eventStartDate >= timeMin && eventStartDate <= timeMax) {
-                await supabase.from("calendar_events").upsert(
-                  {
-                    family_id: member.family_id,
-                    source_calendar_id: cal.calendar_id,
-                    external_event_id: externalId,
-                    title,
-                    description,
-                    location,
-                    start_at: startAt,
-                    end_at: endAt,
-                    all_day: allDay,
-                    color: cal.color ?? "#C4714F",
-                    created_by: cal.family_member_id,
-                  },
-                  { onConflict: "family_id,external_event_id" }
-                )
-
                 fetchedIds.push(externalId)
+
+                const existing = existingEventMap.get(externalId)
+                if (
+                  existing &&
+                  existing.title === title &&
+                  (existing.description ?? null) === description &&
+                  (existing.location ?? null) === location &&
+                  existing.start_at === startAt &&
+                  (existing.end_at ?? null) === endAt &&
+                  existing.all_day === allDay &&
+                  (existing.color ?? null) === colorToUse
+                ) {
+                  continue
+                }
+
+                toUpsert.push({
+                  family_id: member.family_id,
+                  source_calendar_id: cal.calendar_id,
+                  external_event_id: externalId,
+                  title,
+                  description,
+                  location,
+                  start_at: startAt,
+                  end_at: endAt,
+                  all_day: allDay,
+                  color: colorToUse,
+                  created_by: cal.family_member_id,
+                })
               }
             }
           }
 
-          // Clean up events in this calendar that are no longer in the ICS feed
-          const { data: dbEvents } = await supabase
-            .from("calendar_events")
-            .select("id, external_event_id")
-            .eq("family_id", member.family_id)
-            .eq("source_calendar_id", cal.calendar_id)
-            .gte("start_at", timeMin.toISOString())
-            .lte("start_at", timeMax.toISOString())
-            .not("external_event_id", "is", null)
+          // Batch upsert in chunks of 200 ONLY for changed/new events
+          for (let i = 0; i < toUpsert.length; i += 200) {
+            await supabase
+              .from("calendar_events")
+              .upsert(toUpsert.slice(i, i + 200), { onConflict: "family_id,external_event_id" })
+          }
 
-          const toDelete = (dbEvents ?? [])
+          // Clean up events in this calendar that are no longer in the ICS feed
+          const toDelete = (existingEvents ?? [])
             .filter((e: any) => e.external_event_id && !fetchedIds.includes(e.external_event_id))
             .map((e: any) => e.id)
 
           if (toDelete.length > 0) {
-            await supabase.from("calendar_events").delete().in("id", toDelete)
+            for (let i = 0; i < toDelete.length; i += 200) {
+              await supabase.from("calendar_events").delete().in("id", toDelete.slice(i, i + 200))
+            }
           }
 
           // Update last_synced_at

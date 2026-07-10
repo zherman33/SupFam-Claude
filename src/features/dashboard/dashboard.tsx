@@ -79,7 +79,7 @@ export function Dashboard() {
         syncCalendars.mutate()
         syncTasks.mutate()
       }
-    }, 30000)
+    }, 15 * 60 * 1000) // 15 minutes
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility)
