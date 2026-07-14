@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useFamilyMember } from '@/features/auth/use-family-member'
+import { format, parseISO } from 'date-fns'
 
 export interface CalendarEvent {
   id: string
@@ -42,14 +43,22 @@ export interface EventDateBounds {
   isMultiDay: boolean
 }
 
+export function getEventLocalDate(dateStr: string, allDay: boolean): string {
+  if (allDay) {
+    return dateStr.slice(0, 10)
+  }
+  return format(parseISO(dateStr), 'yyyy-MM-dd')
+}
+
 export function getEventDateBounds(ev: CalendarEvent): EventDateBounds {
-  const firstDay = ev.start_at.slice(0, 10)
+  const firstDay = getEventLocalDate(ev.start_at, ev.all_day)
   if (!ev.end_at) {
     return { firstDay, lastDay: firstDay, dates: [firstDay], isMultiDay: false }
   }
 
-  let lastDay = ev.end_at.slice(0, 10)
+  let lastDay = getEventLocalDate(ev.end_at, ev.all_day)
   const isExclusiveEnd =
+    ev.all_day &&
     (ev.end_at.includes('T00:00:00') || ev.end_at.includes(' 00:00:00')) &&
     lastDay > firstDay
 
@@ -88,12 +97,12 @@ export function useCalendarEvents() {
     staleTime: 1000 * 60 * 2,
     refetchInterval: 1000 * 60 * 5,
     queryFn: async () => {
-      // Fetch events ±5 weeks from today
+      // Fetch events to match the dashboard's display range (4 weeks back to 22 weeks forward)
       const now = new Date()
       const from = new Date(now)
       from.setDate(now.getDate() - 28)  // 4 weeks back
       const to = new Date(now)
-      to.setDate(now.getDate() + 84)    // 12 weeks forward
+      to.setDate(now.getDate() + 154)   // 22 weeks forward
 
       const { data, error } = await supabase
         .from('calendar_events')
@@ -153,7 +162,7 @@ export function useCalendarEvents() {
             baseId = parts.slice(0, -1).join('_')
           }
         }
-        const eventDate = ev.start_at.slice(0, 10)
+        const eventDate = getEventLocalDate(ev.start_at, ev.all_day)
         const occurrenceKey = `${baseId}_${eventDate}`
 
         if (seenOccurrenceKeys.has(occurrenceKey)) {

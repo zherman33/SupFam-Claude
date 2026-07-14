@@ -130,12 +130,12 @@ Deno.serve(async (req) => {
           )
         }
 
-        // Fetch events for visible calendars (-4 weeks to +12 weeks to match dashboard window)
+        // Fetch events for visible calendars (-4 weeks to +22 weeks to match dashboard window)
         const now = new Date()
         const timeMin = new Date(now)
         timeMin.setDate(now.getDate() - 28)
         const timeMax = new Date(now)
-        timeMax.setDate(now.getDate() + 84)
+        timeMax.setDate(now.getDate() + 154)
 
         let eventsCount = 0
 
@@ -311,7 +311,7 @@ Deno.serve(async (req) => {
       const timeMin = new Date(now)
       timeMin.setDate(now.getDate() - 28)
       const timeMax = new Date(now)
-      timeMax.setDate(now.getDate() + 84)
+      timeMax.setDate(now.getDate() + 154)
 
       for (const cal of icsCalendars) {
         const member = Array.isArray(cal.family_members)

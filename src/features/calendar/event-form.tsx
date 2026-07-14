@@ -34,7 +34,7 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
   const [title, setTitle] = useState(event?.title ?? '')
   const [allDay, setAllDay] = useState(event?.all_day ?? true)
   const [startDate, setStartDate] = useState(
-    event ? event.start_at.slice(0, 10)
+    event ? (event.all_day ? event.start_at.slice(0, 10) : format(parseISO(event.start_at), 'yyyy-MM-dd'))
     : initialDate ? format(initialDate, 'yyyy-MM-dd')
     : format(new Date(), 'yyyy-MM-dd')
   )
@@ -42,7 +42,7 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
     event && !event.all_day ? format(parseISO(event.start_at), 'HH:mm') : '09:00'
   )
   const [endDate, setEndDate] = useState(
-    event?.end_at ? event.end_at.slice(0, 10) : startDate
+    event?.end_at ? (event.all_day ? event.end_at.slice(0, 10) : format(parseISO(event.end_at), 'yyyy-MM-dd')) : startDate
   )
   const [endTime, setEndTime] = useState(
     event?.end_at && !event.all_day ? format(parseISO(event.end_at), 'HH:mm') : '10:00'
