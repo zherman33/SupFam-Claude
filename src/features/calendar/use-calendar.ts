@@ -144,7 +144,15 @@ export function useCalendarEvents() {
 
         // Recurrence instance duplicate match (same base event ID on the same day)
         // Extract base ID (e.g., "eventId" from "eventId_20260706T120000Z")
-        const baseId = ev.external_event_id.split('_')[0]
+        let baseId = ev.external_event_id
+        const parts = ev.external_event_id.split('_')
+        if (parts.length > 1) {
+          const lastPart = parts[parts.length - 1]
+          // If the last part matches a date or datetime recurrence pattern, strip it
+          if (/^(\d{8}(T\d{6}Z?)?|\d{4}-\d{2}-\d{2})$/.test(lastPart)) {
+            baseId = parts.slice(0, -1).join('_')
+          }
+        }
         const eventDate = ev.start_at.slice(0, 10)
         const occurrenceKey = `${baseId}_${eventDate}`
 
