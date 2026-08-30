@@ -8,9 +8,32 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Sup Fam" />
-    <meta name="theme-color" content="#FAF7F2" />
+    <meta name="theme-color" content="#FAF7F2" id="theme-color-meta" />
+    <script>
+      (function() {
+        try {
+          const theme = localStorage.getItem('family-planner-theme') || 'warm-cream';
+          document.documentElement.setAttribute('data-theme', theme);
+          const colors = {
+            'warm-cream': '#FAF7F2',
+            'ocean-breeze': '#ECF3F6',
+            'forest-moss': '#EFF3E9',
+            'sunset-rose': '#F6ECE8',
+            'midnight-slate': '#12151C',
+            'sunset-glow': '#FFF8F0',
+            'neon-synth': '#121620'
+          };
+          const meta = document.getElementById('theme-color-meta');
+          if (meta) {
+            meta.setAttribute('content', colors[theme] || '#FAF7F2');
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

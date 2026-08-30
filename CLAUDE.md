@@ -299,7 +299,7 @@ These go in `.env.local` for development and in Vercel's environment variables f
 
 ## Important Constraints
 
-- **AI terminal automation for Git & Supabase.** The AI assistant is explicitly authorized and instructed to execute git commands (`git add`, `git commit`, `git push`), GitHub CLI (`gh`), and Supabase CLI commands via the terminal (`run_command`) on behalf of the user to handle version control, PRs, database migrations, and production deployments directly. Never tell the user to push manually via GitHub Desktop.
+- **Git commands are allowed.** You may use git add, commit, push, and other git commands directly in the terminal to deploy and manage version control.
 - **No separate backend server.** Everything goes through Supabase.
 - **No dark mode.** The app is always warm cream.
 - **iPad landscape is the primary design target.** Don't optimize for mobile first.

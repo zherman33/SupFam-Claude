@@ -1,6 +1,14 @@
 import { useState } from 'react'
-import { useConnectedCalendars, useToggleCalendarVisibility, useToggleQuickToggle, useSyncCalendars, useUpdateCalendarColor, useDeleteConnectedCalendar } from './use-calendar'
+import {
+  useConnectedCalendars,
+  useToggleCalendarVisibility,
+  useToggleQuickToggle,
+  useSyncCalendars,
+  useUpdateCalendarColor,
+  useDeleteConnectedCalendar,
+} from './use-calendar'
 import { AddCalendarModal } from './add-calendar-modal'
+import { getCalendarColor } from '@/features/settings/theme-context'
 
 interface CalendarPickerProps {
   onClose: () => void
@@ -8,17 +16,14 @@ interface CalendarPickerProps {
   inline?: boolean
 }
 
-const MINI_PRESETS = [
-  '#E91E8C', // Pink
-  '#F44336', // Red
-  '#FF9800', // Orange
-  '#FFC107', // Yellow
-  '#4CAF50', // Green
-  '#009688', // Teal
-  '#2196F3', // Blue
-  '#9C27B0', // Purple
-  '#795548', // Brown
-  '#C4714F', // Terracotta
+const COLOR_PALETTE = [
+  { name: 'Terracotta', hex: '#C4714F', cssVar: 'var(--color-cal-1)' },
+  { name: 'Sage', hex: '#5E7C67', cssVar: 'var(--color-cal-2)' },
+  { name: 'Steel Blue', hex: '#4F7396', cssVar: 'var(--color-cal-3)' },
+  { name: 'Lavender', hex: '#7B6F9A', cssVar: 'var(--color-cal-4)' },
+  { name: 'Rose', hex: '#BC5D76', cssVar: 'var(--color-cal-5)' },
+  { name: 'Ochre', hex: '#C68A2C', cssVar: 'var(--color-cal-6)' },
+  { name: 'Slate', hex: '#6E7A8A', cssVar: 'var(--color-cal-7)' },
 ]
 
 export function CalendarPicker({ onClose, inline = false }: CalendarPickerProps) {
@@ -55,7 +60,7 @@ export function CalendarPicker({ onClose, inline = false }: CalendarPickerProps)
           </button>
           <span className="text-brown-700/15 text-xs">|</span>
           <button
-            onClick={() => sync.mutate()}
+            onClick={() => sync.mutate(undefined)}
             disabled={sync.isPending}
             className="flex items-center gap-1 text-xs font-semibold text-brown-700/50 hover:text-terracotta-500 transition-colors disabled:opacity-40"
           >
@@ -111,9 +116,9 @@ export function CalendarPicker({ onClose, inline = false }: CalendarPickerProps)
                       e.stopPropagation()
                       setEditingColorId(editingColorId === cal.id ? null : cal.id)
                     }}
-                    className="relative flex-shrink-0 h-4 w-4 rounded transition-transform hover:scale-110 focus:outline-none ring-1 ring-black/5"
+                    className="relative flex-shrink-0 h-4 w-4 rounded-full transition-transform hover:scale-110 focus:outline-none ring-1 ring-black/5"
                     style={{
-                      backgroundColor: cal.color ?? '#C4714F',
+                      backgroundColor: getCalendarColor(cal.color),
                       opacity: cal.is_visible ? 1 : 0.25,
                     }}
                   >
@@ -192,25 +197,26 @@ export function CalendarPicker({ onClose, inline = false }: CalendarPickerProps)
                       </button>
                     </div>
                     <div className="flex flex-wrap gap-1.5 items-center">
-                      {MINI_PRESETS.map(hex => (
+                      {COLOR_PALETTE.map(color => (
                         <button
-                          key={hex}
+                          key={color.hex}
                           type="button"
+                          title={color.name}
                           onClick={() => {
-                            updateColor.mutate({ id: cal.id, color: hex, calendar_id: cal.calendar_id })
+                            updateColor.mutate({ id: cal.id, color: color.hex, calendar_id: cal.calendar_id })
                             setEditingColorId(null)
                           }}
-                          className="h-5 w-5 rounded transition-transform hover:scale-110 flex items-center justify-center shadow-sm"
-                          style={{ backgroundColor: hex }}
+                          className="h-5 w-5 rounded-full transition-transform hover:scale-110 flex items-center justify-center shadow-sm"
+                          style={{ backgroundColor: color.cssVar }}
                         >
-                          {(cal.color ?? '#C4714F').toLowerCase() === hex.toLowerCase() && (
+                          {(cal.color ?? '#C4714F').toUpperCase() === color.hex.toUpperCase() && (
                             <svg className="h-2.5 w-2.5 text-white" viewBox="0 0 10 10" fill="none">
                               <path d="M2 5l2.5 2.5 3.5-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                             </svg>
                           )}
                         </button>
                       ))}
-                      <label className="h-5 w-5 rounded border border-dashed border-sand-400 cursor-pointer flex items-center justify-center hover:border-terracotta-500 transition-colors bg-white shadow-sm" title="Custom color">
+                      <label className="h-5 w-5 rounded-full border border-dashed border-sand-400 cursor-pointer flex items-center justify-center hover:border-terracotta-500 transition-colors bg-white shadow-sm" title="Custom color">
                         <input
                           type="color"
                           value={cal.color ?? '#C4714F'}

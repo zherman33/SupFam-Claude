@@ -79,14 +79,20 @@ export function applyColorRules(
   rules: EventColorRule[] | undefined
 ): string | null {
   if (!rules?.length) return null
+  const t = title.toLowerCase()
   for (const rule of rules) {
-    const kw = rule.keyword.toLowerCase()
-    const t = title.toLowerCase()
-    const match =
-      rule.match_type === 'contains' ? t.includes(kw) :
-      rule.match_type === 'starts_with' ? t.startsWith(kw) :
-      rule.match_type === 'ends_with' ? t.endsWith(kw) :
-      t === kw
+    // Split by comma to support multiple keywords in a single rule, trim, and filter out empty
+    const keywords = rule.keyword.split(',').map(k => k.trim().toLowerCase()).filter(Boolean)
+    
+    const match = keywords.some(kw => {
+      return (
+        rule.match_type === 'contains' ? t.includes(kw) :
+        rule.match_type === 'starts_with' ? t.startsWith(kw) :
+        rule.match_type === 'ends_with' ? t.endsWith(kw) :
+        t === kw
+      )
+    })
+    
     if (match) return rule.color
   }
   return null

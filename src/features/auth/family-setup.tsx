@@ -118,7 +118,7 @@ export function FamilySetup({ onComplete }: FamilySetupProps) {
   }
 
   return (
-    <div className="flex min-h-svh flex-col bg-cream-100">
+    <div className="flex min-h-svh flex-col bg-cream-100 pt-safe">
 
       {/* Header */}
       <div className="flex-shrink-0 px-6 pt-14 pb-6">

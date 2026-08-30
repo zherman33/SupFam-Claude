@@ -11,7 +11,7 @@ import { GroceryPanel } from '@/features/grocery/grocery-panel'
 import { NotesPanel } from '@/features/notes/notes-panel'
 import { useTasks, useSyncTasks, type Task } from '@/features/tasks/use-tasks'
 import { TaskForm } from '@/features/tasks/task-form'
-import { useCalendarEvents, useSyncCalendars } from '@/features/calendar/use-calendar'
+import { useCalendarEvents, useSyncCalendars, useConnectedCalendars } from '@/features/calendar/use-calendar'
 import { SystemSettings } from '@/lib/system-settings'
 
 type Drawer = 'grocery' | 'notes' | null
@@ -20,13 +20,21 @@ export function Dashboard() {
   const { signOut } = useAuth()
   const { data: member } = useFamilyMember()
   const { data: tasks } = useTasks()
-  const { data: events } = useCalendarEvents()
+  const { data: events, isFetching: isFetchingEvents } = useCalendarEvents()
+  const { data: calendars } = useConnectedCalendars()
   const syncCalendars = useSyncCalendars()
   const syncTasks = useSyncTasks()
 
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
-  const [mode, setMode] = useState<CalendarMode>('month')
+  const [mode, setMode] = useState<CalendarMode>(() => {
+    const saved = localStorage.getItem('family-planner-calendar-mode')
+    return (saved === 'month' || saved === '3week' || saved === 'week') ? saved : '3week'
+  })
   const [drawer, setDrawer] = useState<Drawer>(null)
+
+  useEffect(() => {
+    localStorage.setItem('family-planner-calendar-mode', mode)
+  }, [mode])
   const [menuOpen, setMenuOpen] = useState(false)
   const [calPickerOpen, setCalPickerOpen] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -35,6 +43,14 @@ export function Dashboard() {
 
   const familyName = member?.families?.name ?? 'Your Family'
   const inviteCode = member?.families?.invite_code
+
+  // Filter events to only include those from visible calendars
+  const visibleEvents = events?.filter(ev => {
+    if (!calendars) return true
+    if (!ev.source_calendar_id) return true
+    const cal = calendars.find(c => c.calendar_id === ev.source_calendar_id)
+    return cal ? cal.is_visible : true
+  })
 
   // Apply device/ambient display settings on mount and when returning to focus
   useEffect(() => {
@@ -62,13 +78,13 @@ export function Dashboard() {
   // (ensures voice-added events/tasks from Google Assistant on the Apollo display appear automatically)
   useEffect(() => {
     if (!member?.id) return
-    syncCalendars.mutate()
-    syncTasks.mutate()
+    syncCalendars.mutate(undefined)
+    syncTasks.mutate(undefined)
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        syncCalendars.mutate()
-        syncTasks.mutate()
+        syncCalendars.mutate(undefined)
+        syncTasks.mutate(undefined)
         queryClient.invalidateQueries()
       }
     }
@@ -110,10 +126,10 @@ export function Dashboard() {
           {/* Backdrop */}
           <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
 
-          <div className="absolute right-0 top-full z-50 mt-1.5 w-64 rounded-xl border border-sand-200 bg-white shadow-xl overflow-hidden">
+          <div className="absolute right-0 top-full z-50 mt-1.5 w-64 rounded-xl border border-sand-200 bg-white shadow-xl">
 
             {/* Sync indicator */}
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-sand-100 bg-cream-50">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-sand-100 bg-cream-50 rounded-t-xl">
               <span className="text-xs font-semibold text-brown-700/60 uppercase tracking-widest">
                 {familyName}
               </span>
@@ -253,31 +269,41 @@ export function Dashboard() {
   )
 
   return (
-    <div className="flex h-svh flex-col bg-cream-100 overflow-hidden">
+    <div className="fixed inset-0 flex flex-col bg-cream-100 overflow-hidden pt-safe">
       {/* Advanced Settings full-screen panel */}
       {advancedOpen && (
         <AdvancedSettings onClose={() => setAdvancedOpen(false)} />
       )}
 
       {/* ── Main: task sidebar + calendar + optional right drawer ── */}
-      <div className="flex flex-1 min-h-0 gap-3 px-3 pt-safe pb-0">
+      <div className={`flex flex-1 min-h-0 gap-3 p-3 ${sidebarExpanded ? 'pb-safe' : 'pb-0'}`}>
 
         {/* Task sidebar — shown only when expanded */}
         {sidebarExpanded && (
           <div className="w-72 flex-shrink-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-sand-200/60">
-            <TaskSidebar events={events} onCollapse={() => setSidebarExpanded(false)} onSelectTask={setEditingTask} />
+            <TaskSidebar events={visibleEvents} onCollapse={() => setSidebarExpanded(false)} onSelectTask={setEditingTask} />
           </div>
         )}
 
         <div className="flex-1 min-w-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-sand-200/60 p-4">
           <CalendarView
             tasks={tasks}
-            events={events}
+            events={visibleEvents}
             mode={mode}
             onModeChange={setMode}
             headerRight={dotsMenu}
-            onRefresh={() => { syncCalendars.mutate(); syncTasks.mutate(); }}
-            isRefreshing={syncCalendars.isPending || syncTasks.isPending}
+            onRefresh={() => {
+              syncCalendars.mutate(undefined)
+              syncTasks.mutate(undefined)
+              queryClient.invalidateQueries({ queryKey: ['calendar-events', member?.family_id] })
+            }}
+            onSyncRange={(timeMin, timeMax) => {
+              syncCalendars.mutate({
+                timeMin: timeMin.toISOString(),
+                timeMax: timeMax.toISOString()
+              })
+            }}
+            isRefreshing={syncCalendars.isPending || syncTasks.isPending || isFetchingEvents}
             onSelectTask={setEditingTask}
           />
         </div>
@@ -317,7 +343,7 @@ export function Dashboard() {
 
       {/* ── Task bar — only when sidebar is collapsed ── */}
       {!sidebarExpanded && (
-        <div className="mx-3 my-3 flex-shrink-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-sand-200/60">
+        <div className="mx-3 mt-3 mb-safe flex-shrink-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-sand-200/60">
           <TaskBar onExpand={() => setSidebarExpanded(true)} onSelectTask={setEditingTask} />
         </div>
       )}

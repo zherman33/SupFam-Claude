@@ -20,14 +20,17 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     )
 
-    // Parse optional body: { family_member_id?: string } to sync one member
+    // Parse optional body: { family_member_id?: string, family_id?: string, timeMin?: string, timeMax?: string } to sync one member/family/range
     const body = req.method === "POST" ? await req.json().catch(() => ({})) : {}
     const targetMemberId: string | null = body.family_member_id ?? null
+    const targetFamilyId: string | null = body.family_id ?? null
+    const customTimeMin: string | null = body.timeMin ?? null
+    const customTimeMax: string | null = body.timeMax ?? null
 
     const results: any[] = []
 
     // ─── 1. GOOGLE CALENDAR SYNC ───
-    const googleQuery = supabase.from("google_tokens").select(`
+    let googleQuery = supabase.from("google_tokens").select(`
       id,
       family_member_id,
       access_token,
@@ -35,7 +38,8 @@ Deno.serve(async (req) => {
       token_expires_at,
       family_members!inner(id, display_name, avatar_color, family_id)
     `)
-    if (targetMemberId) googleQuery.eq("family_member_id", targetMemberId)
+    if (targetMemberId) googleQuery = googleQuery.eq("family_member_id", targetMemberId)
+    if (targetFamilyId) googleQuery = googleQuery.eq("family_members.family_id", targetFamilyId)
     const { data: googleTokens, error: tokErr } = await googleQuery
 
     if (tokErr) console.error("Error fetching Google tokens:", tokErr)
@@ -130,12 +134,16 @@ Deno.serve(async (req) => {
           )
         }
 
-        // Fetch events for visible calendars (-4 weeks to +22 weeks to match dashboard window)
+        // Fetch events for visible calendars (-4 weeks to +22 weeks to match dashboard window, or custom range if provided)
         const now = new Date()
-        const timeMin = new Date(now)
-        timeMin.setDate(now.getDate() - 28)
-        const timeMax = new Date(now)
-        timeMax.setDate(now.getDate() + 154)
+        const timeMin = customTimeMin ? new Date(customTimeMin) : new Date(now)
+        if (!customTimeMin) {
+          timeMin.setDate(now.getDate() - 28)
+        }
+        const timeMax = customTimeMax ? new Date(customTimeMax) : new Date(now)
+        if (!customTimeMax) {
+          timeMax.setDate(now.getDate() + 154)
+        }
 
         let eventsCount = 0
 
@@ -290,7 +298,7 @@ Deno.serve(async (req) => {
     }
 
     // ─── 2. ICS / ICAL SUBSCRIPTION SYNC ───
-    const icsQuery = supabase.from("connected_calendars").select(`
+    let icsQuery = supabase.from("connected_calendars").select(`
       id,
       calendar_id,
       calendar_name,
@@ -301,17 +309,22 @@ Deno.serve(async (req) => {
       family_members!inner(id, display_name, family_id)
     `).not("ics_url", "is", null)
 
-    if (targetMemberId) icsQuery.eq("family_member_id", targetMemberId)
+    if (targetMemberId) icsQuery = icsQuery.eq("family_member_id", targetMemberId)
+    if (targetFamilyId) icsQuery = icsQuery.eq("family_members.family_id", targetFamilyId)
     const { data: icsCalendars, error: icsErr } = await icsQuery
 
     if (icsErr) console.error("Error fetching ICS calendars:", icsErr)
 
     if (icsCalendars && icsCalendars.length > 0) {
       const now = new Date()
-      const timeMin = new Date(now)
-      timeMin.setDate(now.getDate() - 28)
-      const timeMax = new Date(now)
-      timeMax.setDate(now.getDate() + 154)
+      const timeMin = customTimeMin ? new Date(customTimeMin) : new Date(now)
+      if (!customTimeMin) {
+        timeMin.setDate(now.getDate() - 28)
+      }
+      const timeMax = customTimeMax ? new Date(customTimeMax) : new Date(now)
+      if (!customTimeMax) {
+        timeMax.setDate(now.getDate() + 154)
+      }
 
       for (const cal of icsCalendars) {
         const member = Array.isArray(cal.family_members)
@@ -514,8 +527,8 @@ Deno.serve(async (req) => {
                   title,
                   description,
                   location,
-                  start_at: startAt,
-                  end_at: endAt,
+                  start_at,
+                  end_at,
                   all_day: allDay,
                   color: colorToUse,
                   created_by: cal.family_member_id,

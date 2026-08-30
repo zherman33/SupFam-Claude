@@ -7,6 +7,7 @@ import {
   useDeleteEventColorRule,
   type EventColorRule,
 } from './use-event-color-rules'
+import { useTheme, THEMES } from './theme-context'
 import {
   useConnectedCalendars,
   useUpdateCalendarColor,
@@ -320,7 +321,7 @@ function ConnectedCalendarCard({
   const [editingColor, setEditingColor] = useState(false)
   const [selectedColor, setSelectedColor] = useState(calendar.color ?? '#C4714F')
   const deleteCal = useDeleteConnectedCalendar()
-  const toggleQuick = useToggleQuickToggle()
+  const toggleQuickToggle = useToggleQuickToggle()
 
   const handleSaveColor = () => {
     onUpdateColor(selectedColor)
@@ -379,7 +380,7 @@ function ConnectedCalendarCard({
           <button
             type="button"
             onClick={() =>
-              toggleQuick.mutate({ id: calendar.id, is_quick_toggle: !calendar.is_quick_toggle })
+              toggleQuickToggle.mutate({ id: calendar.id, is_quick_toggle: !calendar.is_quick_toggle })
             }
             title={
               calendar.is_quick_toggle
@@ -615,7 +616,7 @@ function EventColorRulesTab() {
                 style={{ backgroundColor: `${newColor}18`, borderLeft: `4px solid ${newColor}` }}
               >
                 <span className="text-sm font-semibold truncate" style={{ color: newColor }}>
-                  {newKeyword}&apos;s party 🎉
+                  {(newKeyword.split(',')[0]?.trim() || newKeyword)}&apos;s party 🎉
                 </span>
                 <span className="ml-auto text-xs font-mono opacity-75" style={{ color: newColor }}>
                   9:00 AM
@@ -696,12 +697,19 @@ function RuleCard({
   onUpdate: (r: Partial<EventColorRule> & { id: string }) => void
 }) {
   const [editing, setEditing] = useState(false)
-  const [color, setColor] = useState(rule.color)
   const [keyword, setKeyword] = useState(rule.keyword)
+  const [color, setColor] = useState(rule.color)
   const [matchType, setMatchType] = useState<EventColorRule['match_type']>(rule.match_type)
+  const [label, setLabel] = useState(rule.label || '')
 
   const handleSave = () => {
-    onUpdate({ id: rule.id, color, keyword: keyword.trim(), match_type: matchType })
+    onUpdate({
+      id: rule.id,
+      color,
+      keyword: keyword.trim(),
+      match_type: matchType,
+      label: label.trim() || null,
+    })
     setEditing(false)
   }
 
@@ -747,7 +755,7 @@ function RuleCard({
               style={{ backgroundColor: `${rule.color}15`, color: rule.color }}
             >
               <span className="h-2 w-2 rounded-full" style={{ backgroundColor: rule.color }} />
-              <span>{rule.keyword} event</span>
+              <span>{(rule.keyword.split(',')[0]?.trim() || rule.keyword)} event</span>
             </div>
 
             <button
@@ -809,6 +817,17 @@ function RuleCard({
           </div>
 
           <div>
+            <label className="text-[11px] font-semibold text-brown-700 block mb-1">Category Label (optional)</label>
+            <input
+              type="text"
+              value={label}
+              onChange={e => setLabel(e.target.value)}
+              placeholder="e.g. Birthdays"
+              className="w-full rounded-xl border border-sand-300 bg-cream-50/50 px-3 py-1.5 text-sm text-brown-800 focus:border-terracotta-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
             <label className="text-[11px] font-semibold text-brown-700 block mb-1.5">Color Theme</label>
             <ColorSwatchPicker selectedColor={color} onSelectColor={setColor} />
           </div>
@@ -819,6 +838,8 @@ function RuleCard({
               onClick={() => {
                 setColor(rule.color)
                 setKeyword(rule.keyword)
+                setMatchType(rule.match_type)
+                setLabel(rule.label || '')
                 setEditing(false)
               }}
               className="rounded-xl border border-sand-300 px-3.5 py-1.5 text-xs font-semibold text-brown-700 hover:bg-cream-100 transition-colors"
@@ -844,8 +865,77 @@ function RuleCard({
 function DisplayAndDeviceTab() {
   return (
     <div className="space-y-6">
+      <ColorThemeSection />
       <FontSizeSection />
       <AmbientDeviceSection />
+    </div>
+  )
+}
+
+function ColorThemeSection() {
+  const { theme, setTheme } = useTheme()
+
+  return (
+    <div className="rounded-2xl border border-sand-200/80 bg-white p-5 shadow-2xs space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold text-brown-800">Color Theme</h3>
+        <p className="text-xs text-brown-700/60 mt-0.5">
+          Select an overall color palette for your family planner.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        {THEMES.map(t => {
+          const isActive = theme === t.id
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTheme(t.id)}
+              className={`flex flex-col justify-between rounded-xl border p-3.5 text-left transition-all cursor-pointer relative overflow-hidden group select-none ${
+                isActive
+                  ? 'border-terracotta-500 bg-terracotta-500/5 shadow-sm ring-1 ring-terracotta-500'
+                  : 'border-sand-200 bg-white hover:bg-cream-100/40 hover:border-sand-300'
+              }`}
+            >
+              <div className="w-full">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-brown-800">{t.name}</span>
+                  {isActive && (
+                    <span className="rounded-full bg-terracotta-500 p-0.5 text-white flex items-center justify-center flex-shrink-0">
+                      <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
+                        <path d="M2.5 6l2.33 2.33L9.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-brown-700/60 mt-1.5 leading-normal pr-1">
+                  {t.description}
+                </p>
+              </div>
+
+              {/* Swatch Previews */}
+              <div className="flex items-center gap-1.5 mt-3.5 rounded-lg border border-sand-200/50 bg-cream-100/30 p-1.5 w-max">
+                <div
+                  className="h-4.5 w-4.5 rounded border border-sand-200/60 shadow-inner"
+                  style={{ backgroundColor: t.previewColors.bg }}
+                  title="Background Color"
+                />
+                <div
+                  className="h-4.5 w-4.5 rounded border border-sand-200/60 shadow-inner"
+                  style={{ backgroundColor: t.previewColors.text }}
+                  title="Text Color"
+                />
+                <div
+                  className="h-4.5 w-4.5 rounded border border-sand-200/60 shadow-inner"
+                  style={{ backgroundColor: t.previewColors.accent }}
+                  title="Accent Color"
+                />
+              </div>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

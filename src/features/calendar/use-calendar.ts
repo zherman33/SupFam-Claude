@@ -97,12 +97,12 @@ export function useCalendarEvents() {
     staleTime: 1000 * 60 * 2,
     refetchInterval: 1000 * 60 * 5,
     queryFn: async () => {
-      // Fetch events to match the dashboard's display range (4 weeks back to 22 weeks forward)
+      // Fetch events covering the entire grid range (-90 days to +400 days to cover scrolled weeks + 3-week sync buffers)
       const now = new Date()
       const from = new Date(now)
-      from.setDate(now.getDate() - 28)  // 4 weeks back
+      from.setDate(now.getDate() - 90)  // 90 days back
       const to = new Date(now)
-      to.setDate(now.getDate() + 154)   // 22 weeks forward
+      to.setDate(now.getDate() + 400)   // 400 days forward
 
       const { data, error } = await supabase
         .from('calendar_events')
@@ -285,10 +285,10 @@ export function useSyncCalendars() {
   const { data: member } = useFamilyMember()
 
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async (variables: { timeMin?: string; timeMax?: string } | void) => {
       const { data: { session } } = await supabase.auth.getSession()
       const res = await supabase.functions.invoke('sync-calendars', {
-        body: {},
+        body: { ...variables, family_id: member?.family_id },
         headers: session?.access_token
           ? { Authorization: `Bearer ${session.access_token}` }
           : {},
@@ -309,7 +309,7 @@ export function useUpdateCalendarColor() {
   const { data: member } = useFamilyMember()
 
   return useMutation({
-    mutationFn: async ({ id, color, calendar_id }: { id: string; color: string; calendar_id: string }) => {
+    mutationFn: async ({ id, color, calendar_id }: { id: string; color: string; calendar_id?: string }) => {
       const { error: calError } = await supabase
         .from('connected_calendars')
         .update({ color })
@@ -425,4 +425,3 @@ export function useDeleteConnectedCalendar() {
     },
   })
 }
-
