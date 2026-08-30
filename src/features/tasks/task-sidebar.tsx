@@ -1,24 +1,38 @@
 import { useState } from 'react'
 import { format, isPast, isToday, parseISO } from 'date-fns'
 import type { CalendarEvent } from '@/features/calendar/use-calendar'
-import { useTasks, useCreateTask, useToggleTask, useDeleteTask, type Task } from './use-tasks'
-import { useFamilyMembers } from '@/features/auth/use-family-member'
+import { useTasks, useCreateTask, useToggleTask, useDeleteTask, useReorderTasks, sortUnscheduledTasks, type Task } from './use-tasks'
+import { UnscheduledTaskList } from './unscheduled-task-list'
+import { TaskForm } from './task-form'
+import { useFamilyMember, useFamilyMembers } from '@/features/auth/use-family-member'
 
 interface TaskSidebarProps {
   events?: CalendarEvent[]
   onCollapse?: () => void
+  onSelectTask?: (task: Task) => void
 }
 
-export function TaskSidebar({ events = [], onCollapse }: TaskSidebarProps) {
+export function TaskSidebar({ events = [], onCollapse, onSelectTask }: TaskSidebarProps) {
   const { data: tasks } = useTasks()
+  const { data: member } = useFamilyMember()
   const { data: members } = useFamilyMembers()
   const createTask = useCreateTask()
   const toggleTask = useToggleTask()
   const deleteTask = useDeleteTask()
+  const reorderTasks = useReorderTasks()
 
   const [newTitle, setNewTitle] = useState('')
   const [newDue, setNewDue] = useState('')
   const [newAssignee, setNewAssignee] = useState('')
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
+
+  const handleSelectTask = (task: Task) => {
+    if (onSelectTask) {
+      onSelectTask(task)
+    } else {
+      setEditingTask(task)
+    }
+  }
 
   // ── Today's events ──────────────────────────────────────────────────────
   const todayStr = format(new Date(), 'yyyy-MM-dd')
@@ -37,8 +51,8 @@ export function TaskSidebar({ events = [], onCollapse }: TaskSidebarProps) {
 
   // ── Tasks ────────────────────────────────────────────────────────────────
   const incomplete = (tasks ?? []).filter(t => !t.is_complete)
-  const unscheduledTasks = incomplete.filter(t => !t.due_date)
-  const scheduledTasks = incomplete
+  const unscheduled = sortUnscheduledTasks(incomplete.filter(t => !t.due_date), member?.family_id)
+  const scheduled = incomplete
     .filter(t => !!t.due_date)
     .sort((a, b) => a.due_date!.localeCompare(b.due_date!))
 
@@ -98,20 +112,17 @@ export function TaskSidebar({ events = [], onCollapse }: TaskSidebarProps) {
         {/* Tier 2 — Unscheduled Tasks */}
         <section>
           <SectionLabel>Unscheduled Tasks</SectionLabel>
-          {unscheduledTasks.length === 0 ? (
+          {unscheduled.length === 0 ? (
             <EmptyHint>No unscheduled tasks</EmptyHint>
           ) : (
-            <ul className="px-3 pb-1.5 space-y-px">
-              {unscheduledTasks.map(task => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  showDate={false}
-                  onToggle={() => toggleTask.mutate({ id: task.id, is_complete: true })}
-                  onDelete={() => deleteTask.mutate(task.id)}
-                />
-              ))}
-            </ul>
+            <UnscheduledTaskList
+              tasks={unscheduled}
+              variant="sidebar"
+              onToggle={(task) => toggleTask.mutate({ id: task.id, is_complete: true })}
+              onDelete={(task) => deleteTask.mutate(task.id)}
+              onSelect={(task) => handleSelectTask(task)}
+              onReorder={(orderedIds) => reorderTasks.mutate(orderedIds)}
+            />
           )}
         </section>
 
@@ -120,17 +131,18 @@ export function TaskSidebar({ events = [], onCollapse }: TaskSidebarProps) {
         {/* Tier 3 — Scheduled Tasks */}
         <section>
           <SectionLabel>Scheduled Tasks</SectionLabel>
-          {scheduledTasks.length === 0 ? (
+          {scheduled.length === 0 ? (
             <EmptyHint>No scheduled tasks</EmptyHint>
           ) : (
             <ul className="px-3 pb-1.5 space-y-px">
-              {scheduledTasks.map(task => (
+              {scheduled.map(task => (
                 <TaskRow
                   key={task.id}
                   task={task}
                   showDate={true}
                   onToggle={() => toggleTask.mutate({ id: task.id, is_complete: true })}
                   onDelete={() => deleteTask.mutate(task.id)}
+                  onSelect={() => handleSelectTask(task)}
                 />
               ))}
             </ul>
@@ -192,6 +204,10 @@ export function TaskSidebar({ events = [], onCollapse }: TaskSidebarProps) {
           </form>
         </div>
       </div>
+
+      {editingTask && (
+        <TaskForm task={editingTask} onClose={() => setEditingTask(null)} />
+      )}
     </div>
   )
 }
@@ -246,11 +262,13 @@ function TaskRow({
   showDate = false,
   onToggle,
   onDelete,
+  onSelect,
 }: {
   task: Task
   showDate?: boolean
   onToggle: () => void
   onDelete: () => void
+  onSelect?: () => void
 }) {
   const color = task.assigned_member?.avatar_color ?? '#C4714F'
   const isOverdue =
@@ -259,11 +277,19 @@ function TaskRow({
     !isToday(parseISO(task.due_date))
 
   return (
-    <li className="group flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-cream-100 transition-colors">
+    <li
+      onClick={onSelect}
+      className={`group flex items-start gap-2.5 rounded-lg px-2 py-2 transition-colors ${
+        onSelect ? 'cursor-pointer hover:bg-cream-100' : 'hover:bg-cream-100'
+      }`}
+    >
       {/* Complete button */}
       <button
-        onClick={onToggle}
-        className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors hover:bg-terracotta-500/10"
+        onClick={(e) => {
+          e.stopPropagation()
+          onToggle()
+        }}
+        className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors hover:bg-terracotta-500/10 mt-[1px]"
         style={{ borderColor: `${color}70` }}
         title="Mark complete"
       >
@@ -283,14 +309,14 @@ function TaskRow({
       </button>
 
       {/* Title */}
-      <span className="flex-1 min-w-0 truncate text-[15px] font-semibold text-brown-900">
+      <span className="flex-1 min-w-0 break-words whitespace-normal text-sm text-brown-900">
         {task.title}
       </span>
 
       {/* Due date (scheduled section only) */}
       {showDate && task.due_date && (
         <span
-          className={`flex-shrink-0 text-[11px] tabular-nums font-medium ${
+          className={`flex-shrink-0 text-[11px] tabular-nums font-medium mt-[1px] ${
             isOverdue ? 'text-red-500' : 'text-brown-700/45'
           }`}
         >
@@ -301,8 +327,11 @@ function TaskRow({
 
       {/* Delete — reveals on row hover */}
       <button
-        onClick={onDelete}
-        className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full text-brown-700/25 opacity-0 group-hover:opacity-100 hover:text-brown-700/60 transition-all"
+        onClick={(e) => {
+          e.stopPropagation()
+          onDelete()
+        }}
+        className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full text-brown-700/25 opacity-0 group-hover:opacity-100 hover:text-brown-700/60 transition-all mt-[1px]"
         title="Delete"
       >
         <svg className="h-2.5 w-2.5" viewBox="0 0 10 10" fill="none">

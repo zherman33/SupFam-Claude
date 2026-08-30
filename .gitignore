@@ -23,3 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+.env*
+supabase/.temp/
+.DS_Store
+**/.DS_Store
+

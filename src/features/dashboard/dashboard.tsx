@@ -9,8 +9,10 @@ import { TaskBar } from '@/features/tasks/task-bar'
 import { TaskSidebar } from '@/features/tasks/task-sidebar'
 import { GroceryPanel } from '@/features/grocery/grocery-panel'
 import { NotesPanel } from '@/features/notes/notes-panel'
-import { useTasks, useSyncTasks } from '@/features/tasks/use-tasks'
+import { useTasks, useSyncTasks, type Task } from '@/features/tasks/use-tasks'
+import { TaskForm } from '@/features/tasks/task-form'
 import { useCalendarEvents, useSyncCalendars, useConnectedCalendars } from '@/features/calendar/use-calendar'
+import { SystemSettings } from '@/lib/system-settings'
 
 type Drawer = 'grocery' | 'notes' | null
 
@@ -36,6 +38,7 @@ export function Dashboard() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [calPickerOpen, setCalPickerOpen] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
   const familyName = member?.families?.name ?? 'Your Family'
@@ -49,8 +52,30 @@ export function Dashboard() {
     return cal ? cal.is_visible : true
   })
 
-  // Auto-sync on mount and whenever the app comes back into view
-  // (covers PWA waking from background on iPad/iPhone)
+  // Apply device/ambient display settings on mount and when returning to focus
+  useEffect(() => {
+    async function applySavedSettings() {
+      const state = await SystemSettings.getSettingsState()
+      await SystemSettings.setImmersiveMode(state.immersiveMode)
+      await SystemSettings.setKeepScreenOn(state.keepScreenOn)
+      await SystemSettings.setBrightness(state.brightness)
+    }
+
+    applySavedSettings()
+
+    const handleVisibilitySettings = () => {
+      if (document.visibilityState === 'visible') {
+        applySavedSettings()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilitySettings)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilitySettings)
+    }
+  }, [])
+
+  // Auto-sync on mount, whenever the app comes back into view, and periodically every 30s while visible
+  // (ensures voice-added events/tasks from Google Assistant on the Apollo display appear automatically)
   useEffect(() => {
     if (!member?.id) return
     syncCalendars.mutate(undefined)
@@ -64,7 +89,18 @@ export function Dashboard() {
       }
     }
     document.addEventListener('visibilitychange', handleVisibility)
-    return () => document.removeEventListener('visibilitychange', handleVisibility)
+
+    const intervalId = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        syncCalendars.mutate()
+        syncTasks.mutate()
+      }
+    }, 15 * 60 * 1000) // 15 minutes
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+      clearInterval(intervalId)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [member?.id])
 
@@ -97,7 +133,7 @@ export function Dashboard() {
               <span className="text-xs font-semibold text-brown-700/60 uppercase tracking-widest">
                 {familyName}
               </span>
-              {syncCalendars.isPending && (
+              {(syncCalendars.isPending || syncTasks.isPending) && (
                 <span className="flex items-center gap-1 text-[11px] text-brown-700/40">
                   <svg className="h-3 w-3 animate-spin" viewBox="0 0 14 14" fill="none">
                     <path d="M12 7A5 5 0 1 1 7 2M12 2v4H8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -245,7 +281,7 @@ export function Dashboard() {
         {/* Task sidebar — shown only when expanded */}
         {sidebarExpanded && (
           <div className="w-72 flex-shrink-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-sand-200/60">
-            <TaskSidebar events={visibleEvents} onCollapse={() => setSidebarExpanded(false)} />
+            <TaskSidebar events={visibleEvents} onCollapse={() => setSidebarExpanded(false)} onSelectTask={setEditingTask} />
           </div>
         )}
 
@@ -258,6 +294,7 @@ export function Dashboard() {
             headerRight={dotsMenu}
             onRefresh={() => {
               syncCalendars.mutate(undefined)
+              syncTasks.mutate(undefined)
               queryClient.invalidateQueries({ queryKey: ['calendar-events', member?.family_id] })
             }}
             onSyncRange={(timeMin, timeMax) => {
@@ -266,7 +303,8 @@ export function Dashboard() {
                 timeMax: timeMax.toISOString()
               })
             }}
-            isRefreshing={syncCalendars.isPending || isFetchingEvents}
+            isRefreshing={syncCalendars.isPending || syncTasks.isPending || isFetchingEvents}
+            onSelectTask={setEditingTask}
           />
         </div>
 
@@ -306,8 +344,12 @@ export function Dashboard() {
       {/* ── Task bar — only when sidebar is collapsed ── */}
       {!sidebarExpanded && (
         <div className="mx-3 mt-3 mb-safe flex-shrink-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-sand-200/60">
-          <TaskBar onExpand={() => setSidebarExpanded(true)} />
+          <TaskBar onExpand={() => setSidebarExpanded(true)} onSelectTask={setEditingTask} />
         </div>
+      )}
+
+      {editingTask && (
+        <TaskForm task={editingTask} onClose={() => setEditingTask(null)} />
       )}
     </div>
   )

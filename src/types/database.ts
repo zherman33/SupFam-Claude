@@ -64,44 +64,53 @@ export interface Database {
         Row: {
           id: string
           family_member_id: string
-          provider: 'google' | 'outlook' | 'apple'
-          access_token: string
+          provider: 'google' | 'outlook' | 'apple' | 'ical'
+          access_token: string | null
           refresh_token: string | null
           token_expires_at: string | null
           calendar_id: string
           calendar_name: string | null
           color: string | null
           is_visible: boolean
+          is_quick_toggle: boolean
           last_synced_at: string | null
           created_at: string
+          ics_url: string | null
+          account_email: string | null
         }
         Insert: {
           id?: string
           family_member_id: string
-          provider: 'google' | 'outlook' | 'apple'
-          access_token: string
+          provider: 'google' | 'outlook' | 'apple' | 'ical'
+          access_token?: string | null
           refresh_token?: string | null
           token_expires_at?: string | null
           calendar_id: string
           calendar_name?: string | null
           color?: string | null
           is_visible?: boolean
+          is_quick_toggle?: boolean
           last_synced_at?: string | null
           created_at?: string
+          ics_url?: string | null
+          account_email?: string | null
         }
         Update: {
           id?: string
           family_member_id?: string
-          provider?: 'google' | 'outlook' | 'apple'
-          access_token?: string
+          provider?: 'google' | 'outlook' | 'apple' | 'ical'
+          access_token?: string | null
           refresh_token?: string | null
           token_expires_at?: string | null
           calendar_id?: string
           calendar_name?: string | null
           color?: string | null
           is_visible?: boolean
+          is_quick_toggle?: boolean
           last_synced_at?: string | null
           created_at?: string
+          ics_url?: string | null
+          account_email?: string | null
         }
         Relationships: [
           {
@@ -182,6 +191,9 @@ export interface Database {
           recurrence_rule: string | null
           created_by: string
           created_at: string
+          google_task_id: string | null
+          google_tasklist_id: string | null
+          position: number | null
         }
         Insert: {
           id?: string
@@ -195,6 +207,9 @@ export interface Database {
           recurrence_rule?: string | null
           created_by: string
           created_at?: string
+          google_task_id?: string | null
+          google_tasklist_id?: string | null
+          position?: number | null
         }
         Update: {
           id?: string
@@ -208,6 +223,9 @@ export interface Database {
           recurrence_rule?: string | null
           created_by?: string
           created_at?: string
+          google_task_id?: string | null
+          google_tasklist_id?: string | null
+          position?: number | null
         }
         Relationships: [
           {

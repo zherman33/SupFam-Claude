@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { format, isPast, isToday, parseISO } from 'date-fns'
-import { useTasks, useCreateTask, useToggleTask, useDeleteTask } from './use-tasks'
-import { useFamilyMembers } from '@/features/auth/use-family-member'
+import { useTasks, useCreateTask, useToggleTask, useDeleteTask, sortUnscheduledTasks, type Task } from './use-tasks'
+import { TaskForm } from './task-form'
+import { useFamilyMember, useFamilyMembers } from '@/features/auth/use-family-member'
 
-export function TaskBar({ onExpand }: { onExpand?: () => void }) {
+export function TaskBar({ onExpand, onSelectTask }: { onExpand?: () => void; onSelectTask?: (task: Task) => void }) {
   const { data: tasks } = useTasks()
+  const { data: member } = useFamilyMember()
   const { data: members } = useFamilyMembers()
   const createTask = useCreateTask()
   const toggleTask = useToggleTask()
@@ -14,8 +16,22 @@ export function TaskBar({ onExpand }: { onExpand?: () => void }) {
   const [newTitle, setNewTitle] = useState('')
   const [newDue, setNewDue] = useState('')
   const [newAssignee, setNewAssignee] = useState('')
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
 
-  const incomplete = tasks?.filter((t) => !t.is_complete) ?? []
+  const handleSelectTask = (task: Task) => {
+    if (onSelectTask) {
+      onSelectTask(task)
+    } else {
+      setEditingTask(task)
+    }
+  }
+
+  const rawIncomplete = tasks?.filter((t) => !t.is_complete) ?? []
+  const unscheduled = sortUnscheduledTasks(rawIncomplete.filter((t) => !t.due_date), member?.family_id)
+  const scheduled = rawIncomplete
+    .filter((t) => !!t.due_date)
+    .sort((a, b) => a.due_date!.localeCompare(b.due_date!))
+  const incomplete = [...unscheduled, ...scheduled]
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -142,10 +158,15 @@ export function TaskBar({ onExpand }: { onExpand?: () => void }) {
               isOverdue={!!isOverdue}
               onToggle={() => toggleTask.mutate({ id: task.id, is_complete: true })}
               onDelete={() => deleteTask.mutate(task.id)}
+              onSelect={() => handleSelectTask(task)}
             />
           )
         })}
       </div>
+
+      {editingTask && (
+        <TaskForm task={editingTask} onClose={() => setEditingTask(null)} />
+      )}
     </div>
   )
 }
@@ -155,18 +176,25 @@ function TaskChip({
   isOverdue,
   onToggle,
   onDelete,
+  onSelect,
 }: {
-  task: { id: string; title: string; due_date: string | null; assigned_member?: { display_name: string; avatar_color: string | null } | null }
+  task: any
   isOverdue: boolean
   onToggle: () => void
   onDelete: () => void
+  onSelect?: () => void
 }) {
   const [hovered, setHovered] = useState(false)
   const color = task.assigned_member?.avatar_color ?? '#C4714F'
 
   return (
     <div
-      className="group flex h-7 flex-shrink-0 items-center gap-1.5 rounded-full border pl-2 pr-1 text-xs transition-colors hover:brightness-95"
+      onClick={onSelect}
+      className={`group flex h-7 flex-shrink-0 items-center gap-1.5 rounded-full border pl-2 ${
+        hovered ? 'pr-2' : 'pr-3'
+      } text-xs transition-colors hover:brightness-95 ${
+        onSelect ? 'cursor-pointer' : ''
+      }`}
       style={{
         borderColor: `${color}44`,
         backgroundColor: `${color}11`,
@@ -177,7 +205,10 @@ function TaskChip({
     >
       {/* Complete button */}
       <button
-        onClick={onToggle}
+        onClick={(e) => {
+          e.stopPropagation()
+          onToggle()
+        }}
         className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border transition-colors"
         style={{ borderColor: `${color}88` }}
         title="Mark complete"
@@ -187,7 +218,7 @@ function TaskChip({
         </svg>
       </button>
 
-      <span className="max-w-[140px] truncate font-medium">{task.title}</span>
+      <span className="font-medium whitespace-nowrap">{task.title}</span>
 
       {task.due_date && (
         <span
@@ -201,7 +232,10 @@ function TaskChip({
       {/* Delete on hover */}
       {hovered && (
         <button
-          onClick={onDelete}
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete()
+          }}
           className="ml-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full opacity-50 hover:opacity-100 transition-opacity"
           title="Delete task"
         >

@@ -36,8 +36,8 @@ Dual-parent households with young children. Busy professionals in the Apple ecos
 | Auth provider | Supabase Auth with Google OAuth |
 | Deployment | Vercel (frontend only — no separate backend server) |
 | Package manager | pnpm |
-| Version control | GitHub + GitHub Desktop (GUI only) |
-| Build tool | Claude Code |
+| Version control | GitHub + Git / GitHub CLI (AI assistant handles version control and PRs via terminal) |
+| Build tool | Claude Code / Antigravity |
 
 **Key architecture decision:** There is NO separate backend server. The frontend talks directly to Supabase. Auth is Supabase Auth (not custom session auth). Calendar API calls that need server-side secrets use Supabase Edge Functions.
 
@@ -280,8 +280,8 @@ These go in `.env.local` for development and in Vercel's environment variables f
 
 - **Vercel** auto-deploys from `main` branch on GitHub
 - Frontend only — no server to deploy
-- Supabase Edge Functions deploy via Supabase CLI (if/when needed for token refresh)
-- After pushing changes via GitHub Desktop, Vercel rebuilds automatically
+- Supabase Edge Functions & migrations deploy via Supabase CLI (`npx supabase`)
+- The AI assistant MUST handle all Git commits, branch pushes (`git push origin main`), PR merges, and Supabase CLI commands directly via the terminal (`run_command`) when deploying or updating code. Never instruct the user to use GitHub Desktop or run git commands manually.
 
 ---
 

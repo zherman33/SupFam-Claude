@@ -39,7 +39,7 @@ export default defineConfig({
         description: 'The family dashboard that runs the house.',
         theme_color: '#FAF7F2',
         background_color: '#FAF7F2',
-        display: 'standalone',
+        display: 'fullscreen',
         orientation: 'any',
         scope: '/',
         start_url: '/',

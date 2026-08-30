@@ -4,8 +4,13 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClient } from '@/lib/query-client'
 import { AuthProvider } from '@/features/auth/auth-context'
 import { ThemeProvider } from '@/features/settings/theme-context'
+import { initFontSize } from '@/features/settings/font-size-utils'
 import App from './App'
 import './index.css'
+
+// Initialize font size scaling immediately before render to avoid flash of unscaled content
+initFontSize()
+
 
 // Register service worker with skipWaiting — reloads immediately when
 // a new version is deployed so the PWA never serves stale code
