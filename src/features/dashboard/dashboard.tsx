@@ -13,6 +13,7 @@ import { useTasks, useSyncTasks, type Task } from '@/features/tasks/use-tasks'
 import { TaskForm } from '@/features/tasks/task-form'
 import { useCalendarEvents, useSyncCalendars, useConnectedCalendars } from '@/features/calendar/use-calendar'
 import { SystemSettings } from '@/lib/system-settings'
+import { APP_VERSION, APP_UPDATE_DATE } from '@/lib/version'
 
 type Drawer = 'grocery' | 'notes' | null
 
@@ -247,6 +248,23 @@ export function Dashboard() {
                     <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 </button>
+              </div>
+
+              <div className="h-px bg-sand-100" />
+
+              {/* Sup Fam logo with version & update date */}
+              <div className="px-4 py-2 flex items-center justify-between">
+                <span className="font-handwritten text-xl text-terracotta-500 leading-none">
+                  Sup Fam
+                </span>
+                <div className="text-right flex flex-col items-end">
+                  <span className="font-mono text-[11px] font-semibold text-brown-700/60 leading-none">
+                    {APP_VERSION}
+                  </span>
+                  <span className="text-[10px] text-brown-700/40 mt-1 leading-none">
+                    {APP_UPDATE_DATE}
+                  </span>
+                </div>
               </div>
 
               <div className="h-px bg-sand-100" />

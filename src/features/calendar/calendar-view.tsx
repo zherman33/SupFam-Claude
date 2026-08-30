@@ -6,11 +6,18 @@ import {
   isToday,
   parseISO,
 } from 'date-fns'
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type { Task } from '@/features/tasks/use-tasks'
-import { useConnectedCalendars, useToggleCalendarVisibility, getEventDateBounds, type CalendarEvent, type EventDateBounds } from './use-calendar'
+import {
+  useConnectedCalendars,
+  useToggleCalendarVisibility,
+  getEventDateBounds,
+  type CalendarEvent,
+  type EventDateBounds,
+} from './use-calendar'
 import { useEventColorRules, applyColorRules } from '@/features/settings/use-event-color-rules'
 import { EventForm } from './event-form'
+import { TimeGridView } from './time-grid-view'
 
 export type CalendarMode = 'month' | '3week' | 'week'
 
@@ -23,12 +30,13 @@ interface CalendarViewProps {
   headerRight?: React.ReactNode
   onRefresh?: () => void
   isRefreshing?: boolean
+  onSyncRange?: (timeMin: Date, timeMax: Date) => void
   onSelectTask?: (task: Task) => void
 }
 
-// Render 26 weeks: 4 back + 22 forward (~5 months forward)
-const WEEKS_BEFORE = 4
-const WEEKS_AFTER = 22
+// Render 60 weeks: 8 back + 52 forward (~1 year forward)
+const WEEKS_BEFORE = 8
+const WEEKS_AFTER = 52
 const TOTAL_WEEKS = WEEKS_BEFORE + WEEKS_AFTER
 
 export function CalendarView({
@@ -40,9 +48,27 @@ export function CalendarView({
   headerRight,
   onRefresh,
   isRefreshing = false,
+  onSyncRange,
   onSelectTask,
 }: CalendarViewProps) {
-  const today = new Date()
+  const [today, setToday] = useState(() => new Date())
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date()
+      setToday((prev) => {
+        if (
+          prev.getDate() !== now.getDate() ||
+          prev.getMonth() !== now.getMonth() ||
+          prev.getFullYear() !== now.getFullYear()
+        ) {
+          return now
+        }
+        return prev
+      })
+    }, 60000)
+    return () => clearInterval(interval)
+  }, [])
   const anchor = anchorDate ?? today
   const { data: colorRules } = useEventColorRules()
   const { data: connectedCalendars } = useConnectedCalendars()
@@ -64,110 +90,188 @@ export function CalendarView({
   const rowsPerPage = mode === 'week' ? 1 : mode === '3week' ? 3 : 5
 
   // Build ALL weeks — start far enough back that month boundaries are clean
-  const baseWeekStart = startOfWeek(addWeeks(anchor, -WEEKS_BEFORE), { weekStartsOn: 0 })
-  const allWeeks: Date[][] = Array.from({ length: TOTAL_WEEKS }, (_, wi) =>
-    Array.from({ length: 7 }, (_, di) => addDays(baseWeekStart, wi * 7 + di))
-  )
+  const allWeeks = useMemo(() => {
+    const baseWeekStart = startOfWeek(addWeeks(anchor, -WEEKS_BEFORE), { weekStartsOn: 0 })
+    return Array.from({ length: TOTAL_WEEKS }, (_, wi) =>
+      Array.from({ length: 7 }, (_, di) => addDays(baseWeekStart, wi * 7 + di))
+    )
+  }, [anchor])
 
   // ── Snap row indices ────────────────────────────────────────────────────
   // Snap to every week row in all modes to allow smooth, non-skipping scrolling
-  const snapRows = new Set<number>()
-  for (let wi = 0; wi < TOTAL_WEEKS; wi++) {
-    snapRows.add(wi)
-  }
-
-  // Convert snap rows to sorted array for scroll math
-  const snapRowsArr = Array.from(snapRows).sort((a, b) => a - b)
+  const snapRows = useMemo(() => {
+    const snap = new Set<number>()
+    for (let wi = 0; wi < TOTAL_WEEKS; wi++) {
+      snap.add(wi)
+    }
+    return snap
+  }, [])
 
   // ── Scroll state ────────────────────────────────────────────────────────
   const scrollRef = useRef<HTMLDivElement>(null)
   const [topWeekIdx, setTopWeekIdx] = useState(WEEKS_BEFORE)
+  const topWeekIdxRef = useRef(WEEKS_BEFORE)
+  const [isTouchDevice, setIsTouchDevice] = useState(false)
 
-  // Scroll to the snap row closest to today on mount / mode change
+  // Keep track of the synced date ranges to avoid redundant API/DB calls
+  const syncedRangesRef = useRef<{ start: Date; end: Date }[]>([])
+
+  useEffect(() => {
+    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0)
+  }, [])
+
+  // Initialize syncedRangesRef with the initial sync range on mount
+  useEffect(() => {
+    const start = new Date(today)
+    start.setDate(today.getDate() - 7)
+    const end = new Date(today)
+    end.setDate(today.getDate() + 35)
+    
+    syncedRangesRef.current = [{ start, end }]
+  }, [today])
+
+  // Check if we need to sync when scrolling to a new week
+  useEffect(() => {
+    if (!onSyncRange) return
+
+    const currentWeek = allWeeks[topWeekIdx]
+    if (!currentWeek || currentWeek.length === 0) return
+
+    const weekStart = currentWeek[0]
+    
+    // Check if the week start date is covered by any synced range
+    const isCovered = syncedRangesRef.current.some(
+      (range) => weekStart >= range.start && weekStart <= range.end
+    )
+
+    if (!isCovered) {
+      // Trigger sync for this week and an additional 2 weeks worth (total 3 weeks / 21 days)
+      const syncStart = new Date(weekStart)
+      const syncEnd = new Date(weekStart)
+      syncEnd.setDate(weekStart.getDate() + 21)
+
+      // Add to synced ranges first to avoid duplicate requests during transit
+      syncedRangesRef.current.push({ start: syncStart, end: syncEnd })
+      
+      onSyncRange(syncStart, syncEnd)
+    }
+  }, [topWeekIdx, allWeeks, onSyncRange, today])
+
+  const handleManualRefresh = () => {
+    const currentWeek = allWeeks[topWeekIdx]
+    const weekStart = currentWeek ? currentWeek[0] : today
+    
+    const start = new Date(weekStart)
+    start.setDate(weekStart.getDate() - 7)
+    const end = new Date(weekStart)
+    end.setDate(weekStart.getDate() + 35)
+    
+    syncedRangesRef.current = [{ start, end }]
+    
+    if (onSyncRange) {
+      onSyncRange(start, end)
+    } else if (onRefresh) {
+      onRefresh()
+    }
+  }
+
+  // Scroll to today's week on mount / mode change / today change
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
-    const rowH = el.scrollHeight / TOTAL_WEEKS
-    // Find the snap row that contains or precedes WEEKS_BEFORE
-    let targetRow = 0
-    for (const r of snapRowsArr) {
-      if (r <= WEEKS_BEFORE) targetRow = r
-      else break
-    }
-    el.scrollTop = targetRow * rowH
-    setTopWeekIdx(targetRow)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode])
+    
+    // Set a layout-safe timer to calculate the dimensions once the grid is laid out
+    const timer = setTimeout(() => {
+      const rowH = el.scrollHeight / TOTAL_WEEKS
+      const scrollRow = WEEKS_BEFORE
+      
+      el.scrollTop = scrollRow * rowH
+      setTopWeekIdx(scrollRow)
+      topWeekIdxRef.current = scrollRow
+    }, 50)
+
+    return () => clearTimeout(timer)
+  }, [mode, today])
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current
     if (!el) return
     const rowH = el.scrollHeight / TOTAL_WEEKS
     const topRow = Math.round(el.scrollTop / rowH)
-    setTopWeekIdx(topRow)
+    if (topWeekIdxRef.current !== topRow) {
+      topWeekIdxRef.current = topRow
+      setTopWeekIdx(topRow)
+    }
   }, [])
 
-  // Month label from middle of visible rows
-  const midRow = Math.min(topWeekIdx + Math.floor(rowsPerPage / 2), TOTAL_WEEKS - 1)
-  const labelDay = allWeeks[midRow]?.[3] ?? today
-  const monthLabel = mode === 'week'
-    ? (() => {
-        const ws = allWeeks[topWeekIdx]?.[0] ?? today
-        const we = allWeeks[topWeekIdx]?.[6] ?? today
-        return format(ws, 'MMM') === format(we, 'MMM')
-          ? `${format(ws, 'MMM d')}\u2013${format(we, 'd, yyyy')}`
-          : `${format(ws, 'MMM d')} \u2013 ${format(we, 'MMM d')}`
-      })()
-    : mode === '3week'
-    ? (() => {
-        const ws = allWeeks[topWeekIdx]?.[0] ?? today
-        const we = allWeeks[Math.min(topWeekIdx + 2, TOTAL_WEEKS - 1)]?.[6] ?? today
-        return `${format(ws, 'MMM d')} \u2013 ${format(we, 'MMM d')}`
-      })()
-    : format(labelDay, 'MMMM yyyy')
+  const monthLabel = useMemo(() => {
+    const midRow = Math.min(topWeekIdx + Math.floor(rowsPerPage / 2), TOTAL_WEEKS - 1)
+    const labelDay = allWeeks[midRow]?.[3] ?? today
+    return mode === 'week'
+      ? (() => {
+          const ws = allWeeks[topWeekIdx]?.[0] ?? today
+          const we = allWeeks[topWeekIdx]?.[6] ?? today
+          return format(ws, 'MMM') === format(we, 'MMM')
+            ? `${format(ws, 'MMM d')}\u2013${format(we, 'd, yyyy')}`
+            : `${format(ws, 'MMM d')} \u2013 ${format(we, 'MMM d')}`
+        })()
+      : mode === '3week'
+      ? (() => {
+          const ws = allWeeks[topWeekIdx]?.[0] ?? today
+          const we = allWeeks[Math.min(topWeekIdx + 2, TOTAL_WEEKS - 1)]?.[6] ?? today
+          return `${format(ws, 'MMM d')} \u2013 ${format(we, 'MMM d')}`
+        })()
+      : format(labelDay, 'MMMM yyyy')
+  }, [allWeeks, topWeekIdx, mode, rowsPerPage, today])
 
   // ── Index tasks ──────────────────────────────────────────────────────────
-  const tasksByDate = new Map<string, Task[]>()
-  for (const task of tasks) {
-    if (!task.due_date || task.is_complete) continue
-    if (!tasksByDate.has(task.due_date)) tasksByDate.set(task.due_date, [])
-    tasksByDate.get(task.due_date)!.push(task)
-  }
+  const tasksByDate = useMemo(() => {
+    const map = new Map<string, Task[]>()
+    for (const task of tasks) {
+      if (!task.due_date || task.is_complete) continue
+      if (!map.has(task.due_date)) map.set(task.due_date, [])
+      map.get(task.due_date)!.push(task)
+    }
+    return map
+  }, [tasks])
 
   // ── Index events — multi-day expansion using getEventDateBounds ─────────
-  const eventsByDate = new Map<string, CalendarEvent[]>()
-  const eventBoundsMap = new Map<string, EventDateBounds>()
-  const addEvToDate = (key: string, ev: CalendarEvent) => {
-    if (!eventsByDate.has(key)) eventsByDate.set(key, [])
-    if (!eventsByDate.get(key)!.find(e => e.id === ev.id)) {
-      eventsByDate.get(key)!.push(ev)
-    }
-  }
-  for (const ev of events) {
-    const bounds = getEventDateBounds(ev)
-    eventBoundsMap.set(ev.id, bounds)
-    for (const dateKey of bounds.dates) {
-      addEvToDate(dateKey, ev)
-    }
-  }
-  for (const [, evs] of eventsByDate) {
-    evs.sort((a, b) => {
-      const boundsA = eventBoundsMap.get(a.id)!
-      const boundsB = eventBoundsMap.get(b.id)!
-      const isBannerA = a.all_day || boundsA.isMultiDay
-      const isBannerB = b.all_day || boundsB.isMultiDay
-      if (isBannerA && !isBannerB) return -1
-      if (!isBannerA && isBannerB) return 1
-      if (isBannerA && isBannerB) {
-        const startDiff = boundsA.firstDay.localeCompare(boundsB.firstDay)
-        if (startDiff !== 0) return startDiff
-        const durA = boundsA.dates.length
-        const durB = boundsB.dates.length
-        if (durA !== durB) return durB - durA
+  const { eventsByDate, eventBoundsMap } = useMemo(() => {
+    const evMap = new Map<string, CalendarEvent[]>()
+    const boundsMap = new Map<string, EventDateBounds>()
+    const addEvToDate = (key: string, ev: CalendarEvent) => {
+      if (!evMap.has(key)) evMap.set(key, [])
+      if (!evMap.get(key)!.find(e => e.id === ev.id)) {
+        evMap.get(key)!.push(ev)
       }
-      return a.start_at.localeCompare(b.start_at)
-    })
-  }
+    }
+    for (const ev of events) {
+      const bounds = getEventDateBounds(ev)
+      boundsMap.set(ev.id, bounds)
+      for (const dateKey of bounds.dates) {
+        addEvToDate(dateKey, ev)
+      }
+    }
+    for (const [, evs] of evMap) {
+      evs.sort((a, b) => {
+        const boundsA = boundsMap.get(a.id)!
+        const boundsB = boundsMap.get(b.id)!
+        const isBannerA = a.all_day || boundsA.isMultiDay
+        const isBannerB = b.all_day || boundsB.isMultiDay
+        if (isBannerA && !isBannerB) return -1
+        if (!isBannerA && isBannerB) return 1
+        if (isBannerA && isBannerB) {
+          const startDiff = boundsA.firstDay.localeCompare(boundsB.firstDay)
+          if (startDiff !== 0) return startDiff
+          const durA = boundsA.dates.length
+          const durB = boundsB.dates.length
+          if (durA !== durB) return durB - durA
+        }
+        return a.start_at.localeCompare(b.start_at)
+      })
+    }
+    return { eventsByDate: evMap, eventBoundsMap: boundsMap }
+  }, [events])
 
   const DAY_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   const todayDow = today.getDay() // 0 = Sun … 6 = Sat
@@ -229,8 +333,8 @@ export function CalendarView({
         <div className="absolute inset-x-0 flex items-center justify-center pointer-events-none">
           <button
             className="flex items-center gap-1.5 pointer-events-auto active:opacity-60 transition-opacity disabled:cursor-default"
-            onClick={onRefresh}
-            disabled={!onRefresh || isRefreshing}
+            onClick={handleManualRefresh}
+            disabled={(!onRefresh && !onSyncRange) || isRefreshing}
           >
             <span className="font-body text-base font-semibold text-brown-800 tracking-tight">
               {monthLabel}
@@ -271,245 +375,265 @@ export function CalendarView({
         </div>
       </div>
 
-      {/* ── Day headers ── */}
-      <div className="flex-shrink-0 grid grid-cols-7 border-b border-sand-100 pb-1.5 mb-0.5">
-        {DAY_HEADERS.map((d, i) => (
-          <div
-            key={d}
-            className={`text-center font-semibold uppercase tracking-widest ${
-              mode === 'month' ? 'text-[0.6875rem]' : mode === '3week' ? 'text-xs' : 'text-[0.8125rem]'
-            } ${
-              i === todayDow
-                ? 'text-terracotta-500'
-                : i === 0 || i === 6 ? 'text-brown-700/25' : 'text-brown-700/45'
-            }`}
-          >
-            {d}
-          </div>
-        ))}
-      </div>
-
-      {/* ── Scroll container ── */}
-      {/*
-        Each "page" is rowsPerPage rows tall = 100% of the container.
-        scroll-snap-type: y mandatory snaps to each page.
-        Each row group is a snap point.
-        We render all 20 weeks up front — no lazy loading needed for 3 months.
-      */}
-      <div
-        ref={scrollRef}
-        className="flex-1 min-h-0 overflow-y-scroll"
-        style={{
-          scrollSnapType: 'y proximity',
-          WebkitOverflowScrolling: 'touch',
-          scrollbarWidth: 'none',
-        }}
-        onScroll={handleScroll}
-      >
-        {/* Inner: total height = (TOTAL_WEEKS / rowsPerPage) pages */}
-        <div
-          style={{
-            height: `${(TOTAL_WEEKS / rowsPerPage) * 100}%`,
-            display: 'grid',
-            gridTemplateRows: `repeat(${TOTAL_WEEKS}, 1fr)`,
-          }}
-        >
-          {allWeeks.map((week, wi) => {
-            const isSnapPoint = snapRows.has(wi)
-            const weekDateKeys = week.map(d => format(d, 'yyyy-MM-dd'))
-            const weekBanners: CalendarEvent[] = []
-            const seenBannerIds = new Set<string>()
-            for (const dk of weekDateKeys) {
-              const evs = eventsByDate.get(dk) ?? []
-              for (const ev of evs) {
-                const bounds = eventBoundsMap.get(ev.id)
-                if (!isAmbientCalendarEvent(ev) && (ev.all_day || bounds?.isMultiDay)) {
-                  if (!seenBannerIds.has(ev.id)) {
-                    seenBannerIds.add(ev.id)
-                    weekBanners.push(ev)
-                  }
-                }
-              }
-            }
-            weekBanners.sort((a, b) => {
-              const boundsA = eventBoundsMap.get(a.id)!
-              const boundsB = eventBoundsMap.get(b.id)!
-              const startDiff = boundsA.firstDay.localeCompare(boundsB.firstDay)
-              if (startDiff !== 0) return startDiff
-              const durA = boundsA.dates.length
-              const durB = boundsB.dates.length
-              if (durA !== durB) return durB - durA
-              return a.start_at.localeCompare(b.start_at)
-            })
-            const slotOccupancies: boolean[][] = []
-            const bannerSlotMap = new Map<string, number>()
-            for (const ev of weekBanners) {
-              const bounds = eventBoundsMap.get(ev.id)!
-              let foundSlot = -1
-              for (let s = 0; s < slotOccupancies.length; s++) {
-                let conflict = false
-                for (let d = 0; d < 7; d++) {
-                  if (bounds.dates.includes(weekDateKeys[d]) && slotOccupancies[s][d]) {
-                    conflict = true
-                    break
-                  }
-                }
-                if (!conflict) {
-                  foundSlot = s
-                  break
-                }
-              }
-              if (foundSlot === -1) {
-                foundSlot = slotOccupancies.length
-                slotOccupancies.push(Array(7).fill(false))
-              }
-              for (let d = 0; d < 7; d++) {
-                if (bounds.dates.includes(weekDateKeys[d])) {
-                  slotOccupancies[foundSlot][d] = true
-                }
-              }
-              bannerSlotMap.set(ev.id, foundSlot)
-            }
-            const totalBannerSlots = slotOccupancies.length
-
-            return (
+      {mode === 'week' ? (
+        <div className="flex-1 min-h-0">
+          <TimeGridView
+            week={allWeeks[topWeekIdx] ?? today}
+            events={events}
+            onEventClick={(ev) => setEditEvent(ev)}
+            onCellClick={(day) => setFormDate(day)}
+          />
+        </div>
+      ) : (
+        <>
+          {/* ── Day headers ── */}
+          <div className="flex-shrink-0 grid grid-cols-7 border-b border-sand-100 pb-1.5 mb-0.5">
+            {DAY_HEADERS.map((d, i) => (
               <div
-                key={wi}
-                className="grid grid-cols-7 border-b border-sand-100 last:border-0 min-h-0"
-                style={isSnapPoint ? { scrollSnapAlign: 'start' } : undefined}
+                key={d}
+                className={`text-center font-semibold uppercase tracking-widest ${
+                  mode === 'month' ? 'text-[0.6875rem]' : mode === '3week' ? 'text-xs' : 'text-[0.8125rem]'
+                } ${
+                  i === todayDow
+                    ? 'text-terracotta-500'
+                    : i === 0 || i === 6 ? 'text-brown-700/25' : 'text-brown-700/45'
+                }`}
               >
-                {week.map((day, dayIdx) => {
-                  const key = format(day, 'yyyy-MM-dd')
-                  const dayEvents = eventsByDate.get(key) ?? []
-                  const dayTasks = tasksByDate.get(key) ?? []
-                  const isCurrentDay = isToday(day)
-                  const isWeekend = day.getDay() === 0 || day.getDay() === 6
+                {d}
+              </div>
+            ))}
+          </div>
 
-                  const dayBannerSlots: (CalendarEvent | null)[] = Array(totalBannerSlots).fill(null)
-                  for (const ev of dayEvents) {
-                    const bounds = eventBoundsMap.get(ev.id)
-                    if (!isAmbientCalendarEvent(ev) && (ev.all_day || bounds?.isMultiDay)) {
-                      const slot = bannerSlotMap.get(ev.id)
-                      if (slot !== undefined) {
-                        dayBannerSlots[slot] = ev
+          {/* ── Scroll container ── */}
+          {/*
+            Each "page" is rowsPerPage rows tall = 100% of the container.
+            scroll-snap-type: y mandatory snaps to each page.
+            Each row group is a snap point.
+            We render all weeks up front — no lazy loading needed for 3 months.
+          */}
+          {/* ── Scroll container wrapper to fix Safari % height bug ── */}
+          <div className="flex-1 min-h-0 relative">
+            <div
+              ref={scrollRef}
+              className="absolute inset-0 overflow-y-scroll calendar-scroll-container"
+              style={{
+                scrollSnapType: isTouchDevice ? 'y proximity' : 'none',
+                WebkitOverflowScrolling: 'touch',
+                scrollbarWidth: 'none',
+                overflowX: 'hidden',
+                overflowAnchor: 'none',
+                overscrollBehavior: 'contain',
+                willChange: 'transform',
+              }}
+              onScroll={handleScroll}
+            >
+              {/* Inner: total height = (TOTAL_WEEKS / rowsPerPage) pages */}
+              <div
+                style={{
+                  height: `${(TOTAL_WEEKS / rowsPerPage) * 100}%`,
+                  display: 'grid',
+                  gridTemplateRows: `repeat(${TOTAL_WEEKS}, minmax(0, 1fr))`,
+                }}
+              >
+                {allWeeks.map((week, wi) => {
+                  const isSnapPoint = snapRows.has(wi)
+                  const weekDateKeys = week.map(d => format(d, 'yyyy-MM-dd'))
+                  const weekBanners: CalendarEvent[] = []
+                  const seenBannerIds = new Set<string>()
+                  for (const dk of weekDateKeys) {
+                    const evs = eventsByDate.get(dk) ?? []
+                    for (const ev of evs) {
+                      const bounds = eventBoundsMap.get(ev.id)
+                      if (!isAmbientCalendarEvent(ev) && (ev.all_day || bounds?.isMultiDay)) {
+                        if (!seenBannerIds.has(ev.id)) {
+                          seenBannerIds.add(ev.id)
+                          weekBanners.push(ev)
+                        }
                       }
                     }
                   }
-
-                  const singleDayEvents = dayEvents.filter(ev => {
-                    const bounds = eventBoundsMap.get(ev.id)
-                    return !isAmbientCalendarEvent(ev) && !ev.all_day && !bounds?.isMultiDay
+                  weekBanners.sort((a, b) => {
+                    const boundsA = eventBoundsMap.get(a.id)!
+                    const boundsB = eventBoundsMap.get(b.id)!
+                    const startDiff = boundsA.firstDay.localeCompare(boundsB.firstDay)
+                    if (startDiff !== 0) return startDiff
+                    const durA = boundsA.dates.length
+                    const durB = boundsB.dates.length
+                    if (durA !== durB) return durB - durA
+                    return a.start_at.localeCompare(b.start_at)
                   })
-                  type Pill = { type: 'event'; ev: CalendarEvent } | { type: 'task'; task: Task }
-                  const personalPills: Pill[] = [
-                    ...singleDayEvents.map(ev => ({ type: 'event' as const, ev })),
-                    ...dayTasks.map(task => ({ type: 'task' as const, task })),
-                  ]
-                  const ambientPills: { type: 'event'; ev: CalendarEvent }[] = dayEvents
-                    .filter(ev => isAmbientCalendarEvent(ev))
-                    .map(ev => ({ type: 'event' as const, ev }))
-
-                  const lastOccupiedSlot = dayBannerSlots.map(ev => ev !== null).lastIndexOf(true)
-                  const renderedBannerSlots = dayBannerSlots.slice(0, lastOccupiedSlot + 1)
-                  const hasOtherContent = renderedBannerSlots.some(ev => ev !== null) || personalPills.length > 0
+                  const slotOccupancies: boolean[][] = []
+                  const bannerSlotMap = new Map<string, number>()
+                  for (const ev of weekBanners) {
+                    const bounds = eventBoundsMap.get(ev.id)!
+                    let foundSlot = -1
+                    for (let s = 0; s < slotOccupancies.length; s++) {
+                      let conflict = false
+                      for (let d = 0; d < 7; d++) {
+                        if (bounds.dates.includes(weekDateKeys[d]) && slotOccupancies[s][d]) {
+                          conflict = true
+                          break
+                        }
+                      }
+                      if (!conflict) {
+                        foundSlot = s
+                        break
+                      }
+                    }
+                    if (foundSlot === -1) {
+                      foundSlot = slotOccupancies.length
+                      slotOccupancies.push(Array(7).fill(false))
+                    }
+                    for (let d = 0; d < 7; d++) {
+                      if (bounds.dates.includes(weekDateKeys[d])) {
+                        slotOccupancies[foundSlot][d] = true
+                      }
+                    }
+                    bannerSlotMap.set(ev.id, foundSlot)
+                  }
+                  const totalBannerSlots = slotOccupancies.length
 
                   return (
                     <div
-                      key={key}
-                      className={`relative flex flex-col border-r border-sand-100 last:border-r-0 overflow-hidden min-h-0 cursor-pointer
-                        ${isWeekend && !isCurrentDay ? 'bg-[#faf8f5]' : 'bg-white'}
-                        ${isCurrentDay ? 'bg-terracotta-500/[0.09]' : ''}
-                      `}
-                      onClick={() => setFormDate(day)}
+                      key={wi}
+                      className="grid grid-cols-7 border-b border-sand-100 last:border-0 min-h-0"
+                      style={isSnapPoint ? { scrollSnapAlign: 'start' } : undefined}
                     >
-                      {isCurrentDay && (
-                        <div className="absolute top-0 inset-x-0 h-[3px] bg-terracotta-500" />
-                      )}
-                      <div className={`flex flex-col h-full ${mode === 'month' ? 'p-1.5 gap-px' : 'p-2 gap-1'}`}>
-                        <div className="flex-shrink-0 mb-0.5">
-                          {isCurrentDay ? (
-                            // Outline ring — subtle, lighter feel
-                            <span className={`inline-flex items-center justify-center rounded-full border border-terracotta-400 text-terracotta-500 font-semibold leading-none ${
-                              mode === 'month' ? 'h-[1.375rem] w-[1.375rem] text-[0.6875rem]' : 'h-[1.625rem] w-[1.625rem] text-[0.8125rem]'
-                            }`}>
-                              {format(day, 'd')}
-                            </span>
-                          ) : (
-                            <span className={`
-                              inline-flex items-center justify-center rounded-full font-bold leading-none
-                              ${mode === 'month' ? 'h-[1.125rem] w-[1.125rem] text-[0.625rem]' : 'h-[1.375rem] w-[1.375rem] text-[0.75rem]'}
-                              ${isWeekend ? 'text-brown-700/30' : 'text-brown-700/60'}
-                            `}>
-                              {format(day, 'd')}
-                            </span>
-                          )}
-                        </div>
-                        <div className={`flex flex-col flex-1 min-h-0 ${mode === 'month' ? 'gap-px' : 'gap-1'}`}>
-                          {renderedBannerSlots.map((ev, slotIdx) => {
-                            if (!ev) {
-                              return <BannerSpacer key={`spacer-${slotIdx}-${key}`} mode={mode} />
+                      {week.map((day, dayIdx) => {
+                        const key = format(day, 'yyyy-MM-dd')
+                        const dayEvents = eventsByDate.get(key) ?? []
+                        const dayTasks = tasksByDate.get(key) ?? []
+                        const isCurrentDay = isToday(day)
+                        const isWeekend = day.getDay() === 0 || day.getDay() === 6
+
+                        const dayBannerSlots: (CalendarEvent | null)[] = Array(totalBannerSlots).fill(null)
+                        for (const ev of dayEvents) {
+                          const bounds = eventBoundsMap.get(ev.id)
+                          if (!isAmbientCalendarEvent(ev) && (ev.all_day || bounds?.isMultiDay)) {
+                            const slot = bannerSlotMap.get(ev.id)
+                            if (slot !== undefined) {
+                              dayBannerSlots[slot] = ev
                             }
-                            const bounds = eventBoundsMap.get(ev.id)!
-                            const isRealStart = key === bounds.firstDay
-                            const isRealEnd = key === bounds.lastDay
-                            const isRowStart = dayIdx === 0
-                            const showTitle = isRealStart || isRowStart
-                            return (
-                              <EventPill
-                                key={`${ev.id}-${key}`}
-                                ev={ev}
-                                mode={mode}
-                                colorRules={colorRules}
-                                calColor={calColorMap.get(ev.source_calendar_id)}
-                                onClick={e => { e.stopPropagation(); setEditEvent(ev) }}
-                                isBanner={true}
-                                isStart={isRealStart}
-                                isEnd={isRealEnd}
-                                showTitle={showTitle}
-                              />
-                            )
-                          })}
-                          {personalPills.map((pill) => pill.type === 'event'
-                            ? <EventPill
-                                key={`${pill.ev.id}-${key}`}
-                                ev={pill.ev}
-                                mode={mode}
-                                colorRules={colorRules}
-                                calColor={calColorMap.get(pill.ev.source_calendar_id)}
-                                onClick={e => { e.stopPropagation(); setEditEvent(pill.ev) }}
-                              />
-                            : <TaskPill
-                                key={pill.task.id}
-                                task={pill.task}
-                                mode={mode}
-                                onClick={onSelectTask ? (e) => { e.stopPropagation(); onSelectTask(pill.task); } : undefined}
-                              />
-                          )}
-                          {ambientPills.length > 0 && (
-                            <>
-                              {hasOtherContent && <div className="flex-1 min-h-0" />}
-                              {ambientPills.map((pill) => (
-                                <EventPill
-                                  key={`${pill.ev.id}-${key}`}
-                                  ev={pill.ev}
-                                  mode={mode}
-                                  colorRules={colorRules}
-                                  calColor={calColorMap.get(pill.ev.source_calendar_id)}
-                                  onClick={e => { e.stopPropagation(); setEditEvent(pill.ev) }}
-                                />
-                              ))}
-                            </>
-                          )}
-                        </div>
-                      </div>
+                          }
+                        }
+
+                        const singleDayEvents = dayEvents.filter(ev => {
+                          const bounds = eventBoundsMap.get(ev.id)
+                          return !isAmbientCalendarEvent(ev) && !ev.all_day && !bounds?.isMultiDay
+                        })
+                        type Pill = { type: 'event'; ev: CalendarEvent } | { type: 'task'; task: Task }
+                        const personalPills: Pill[] = [
+                          ...singleDayEvents.map(ev => ({ type: 'event' as const, ev })),
+                          ...dayTasks.map(task => ({ type: 'task' as const, task })),
+                        ]
+                        const ambientPills: { type: 'event'; ev: CalendarEvent }[] = dayEvents
+                          .filter(ev => isAmbientCalendarEvent(ev))
+                          .map(ev => ({ type: 'event' as const, ev }))
+
+                        const lastOccupiedSlot = dayBannerSlots.map(ev => ev !== null).lastIndexOf(true)
+                        const renderedBannerSlots = dayBannerSlots.slice(0, lastOccupiedSlot + 1)
+                        const hasOtherContent = renderedBannerSlots.some(ev => ev !== null) || personalPills.length > 0
+
+                        return (
+                          <div
+                            key={key}
+                            className={`relative flex flex-col border-r border-sand-100 last:border-r-0 overflow-hidden min-h-0 cursor-pointer
+                              ${isWeekend && !isCurrentDay ? 'bg-[#faf8f5]' : 'bg-white'}
+                              ${isCurrentDay ? 'bg-terracotta-500/[0.09]' : ''}
+                            `}
+                            onClick={() => setFormDate(day)}
+                          >
+                            {isCurrentDay && (
+                              <div className="absolute top-0 inset-x-0 h-[3px] bg-terracotta-500" />
+                            )}
+                            <div className={`flex flex-col h-full ${mode === 'month' ? 'p-1.5 gap-px' : 'p-2 gap-1'}`}>
+                              <div className="flex-shrink-0 mb-0.5">
+                                {isCurrentDay ? (
+                                  // Outline ring — subtle, lighter feel
+                                  <span className={`inline-flex items-center justify-center rounded-full border border-terracotta-400 text-terracotta-500 font-semibold leading-none ${
+                                    mode === 'month' ? 'h-[1.375rem] w-[1.375rem] text-[0.6875rem]' : 'h-[1.625rem] w-[1.625rem] text-[0.8125rem]'
+                                  }`}>
+                                    {format(day, 'd')}
+                                  </span>
+                                ) : (
+                                  <span className={`
+                                    inline-flex items-center justify-center rounded-full font-bold leading-none
+                                    ${mode === 'month' ? 'h-[1.125rem] w-[1.125rem] text-[0.625rem]' : 'h-[1.375rem] w-[1.375rem] text-[0.75rem]'}
+                                    ${isWeekend ? 'text-brown-700/30' : 'text-brown-700/60'}
+                                  `}>
+                                    {format(day, 'd')}
+                                  </span>
+                                )}
+                              </div>
+                              <div className={`flex flex-col flex-1 min-h-0 ${mode === 'month' ? 'gap-px' : 'gap-1'}`}>
+                                {renderedBannerSlots.map((ev, slotIdx) => {
+                                  if (!ev) {
+                                    return <BannerSpacer key={`spacer-${slotIdx}-${key}`} mode={mode} />
+                                  }
+                                  const bounds = eventBoundsMap.get(ev.id)!
+                                  const isRealStart = key === bounds.firstDay
+                                  const isRealEnd = key === bounds.lastDay
+                                  const isRowStart = dayIdx === 0
+                                  const showTitle = isRealStart || isRowStart
+                                  return (
+                                    <EventPill
+                                      key={`${ev.id}-${key}`}
+                                      ev={ev}
+                                      mode={mode}
+                                      colorRules={colorRules}
+                                      calColor={calColorMap.get(ev.source_calendar_id)}
+                                      onClick={e => { e.stopPropagation(); setEditEvent(ev) }}
+                                      isBanner={true}
+                                      isStart={isRealStart}
+                                      isEnd={isRealEnd}
+                                      showTitle={showTitle}
+                                    />
+                                  )
+                                })}
+                                {personalPills.map((pill) => pill.type === 'event'
+                                  ? <EventPill
+                                      key={`${pill.ev.id}-${key}`}
+                                      ev={pill.ev}
+                                      mode={mode}
+                                      colorRules={colorRules}
+                                      calColor={calColorMap.get(pill.ev.source_calendar_id)}
+                                      onClick={e => { e.stopPropagation(); setEditEvent(pill.ev) }}
+                                    />
+                                  : <TaskPill
+                                      key={pill.task.id}
+                                      task={pill.task}
+                                      mode={mode}
+                                      onClick={onSelectTask ? (e) => { e.stopPropagation(); onSelectTask(pill.task); } : undefined}
+                                    />
+                                )}
+                                {ambientPills.length > 0 && (
+                                  <>
+                                    {hasOtherContent && <div className="flex-1 min-h-0" />}
+                                    {ambientPills.map((pill) => (
+                                      <EventPill
+                                        key={`${pill.ev.id}-${key}`}
+                                        ev={pill.ev}
+                                        mode={mode}
+                                        colorRules={colorRules}
+                                        calColor={calColorMap.get(pill.ev.source_calendar_id)}
+                                        onClick={e => { e.stopPropagation(); setEditEvent(pill.ev) }}
+                                      />
+                                    ))}
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
                   )
                 })}
               </div>
-            )
-          })}
-        </div>
-      </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
     </>
   )

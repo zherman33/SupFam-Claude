@@ -1,5 +1,17 @@
-import { useState, useEffect } from 'react'
-import { format, parseISO } from 'date-fns'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import {
+  format,
+  parseISO,
+  startOfMonth,
+  endOfMonth,
+  startOfWeek,
+  endOfWeek,
+  eachDayOfInterval,
+  addMonths,
+  subMonths,
+  isSameDay,
+  parse,
+} from 'date-fns'
 import { useFamilyMember, useFamilyMembers } from '@/features/auth/use-family-member'
 import { useConnectedCalendars, type CalendarEvent } from './use-calendar'
 import {
@@ -32,7 +44,7 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
   // ── Form state ─────────────────────────────────────────────────────────
   const [error, setError] = useState<string | null>(null)
   const [title, setTitle] = useState(event?.title ?? '')
-  const [allDay, setAllDay] = useState(event?.all_day ?? true)
+  const [allDay, setAllDay] = useState(event?.all_day ?? false)
   const [startDate, setStartDate] = useState(
     event ? (event.all_day ? event.start_at.slice(0, 10) : format(parseISO(event.start_at), 'yyyy-MM-dd'))
     : initialDate ? format(initialDate, 'yyyy-MM-dd')
@@ -50,16 +62,86 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
   const [description, setDescription] = useState(event?.description ?? '')
   const [location, setLocation] = useState(event?.location ?? '')
 
+  // Google Places Autocomplete integration
+  const [mapsLoaded, setMapsLoaded] = useState(false)
+  const locationInputRef = useRef<HTMLInputElement>(null)
+  const googleApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+
+  useEffect(() => {
+    if (!googleApiKey) return
+
+    // If script is already in the document, wait for it or just set true
+    if ((window as any).google?.maps?.places) {
+      setMapsLoaded(true)
+      return
+    }
+
+    const existingScript = document.getElementById('google-maps-places-script')
+    if (existingScript) {
+      const handleLoad = () => setMapsLoaded(true)
+      existingScript.addEventListener('load', handleLoad)
+      return () => {
+        existingScript.removeEventListener('load', handleLoad)
+      }
+    }
+
+    const script = document.createElement('script')
+    script.id = 'google-maps-places-script'
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${googleApiKey}&libraries=places`
+    script.async = true
+    script.defer = true
+    script.onload = () => setMapsLoaded(true)
+    document.head.appendChild(script)
+  }, [googleApiKey])
+
+  useEffect(() => {
+    if (!mapsLoaded || !locationInputRef.current || !(window as any).google?.maps?.places) return
+
+    const autocomplete = new (window as any).google.maps.places.Autocomplete(locationInputRef.current, {
+      types: ['geocode', 'establishment'],
+    })
+
+    const listener = autocomplete.addListener('place_changed', () => {
+      const place = autocomplete.getPlace()
+      const formattedAddress = place.formatted_address || place.name || ''
+      setLocation(formattedAddress)
+    })
+
+    // Prevent submitting the form when pressing 'Enter' in the autocomplete list
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        const pacContainer = document.querySelector('.pac-container')
+        if (pacContainer && window.getComputedStyle(pacContainer).display !== 'none') {
+          e.preventDefault()
+        }
+      }
+    }
+
+    const inputElement = locationInputRef.current
+    inputElement.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      if ((window as any).google?.maps?.event && listener) {
+        (window as any).google.maps.event.removeListener(listener)
+      }
+      inputElement.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [mapsLoaded])
+
   // Calendar to save to — default to user's default calendar
   // For edits, use the source calendar of the event
   const [selectedCalendarId, setSelectedCalendarId] = useState<string>(
     event?.source_calendar_id ?? defaultCal?.calendar_id ?? ''
   )
+  
   // Which family member owns the selected calendar
-  const [selectedMemberId, setSelectedMemberId] = useState<string>(
-    event ? (calendars?.find(c => c.calendar_id === event.source_calendar_id)?.family_member_id ?? member?.id ?? '')
-    : member?.id ?? ''
-  )
+  const selectedMemberId = useMemo(() => {
+    if (calendars && selectedCalendarId) {
+      const cal = calendars.find(c => c.calendar_id === selectedCalendarId)
+      if (cal) return cal.family_member_id
+    }
+    return member?.id ?? ''
+  }, [calendars, selectedCalendarId, member?.id])
 
   // Attendees — pre-populate from existing event if editing
   const [attendeeEmails, setAttendeeEmails] = useState<Set<string>>(new Set())
@@ -213,44 +295,48 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
               </div>
 
               {/* Date/time pickers */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-brown-700/60">
-                    {allDay ? 'Start date' : 'Start'}
-                  </label>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={e => setStartDate(e.target.value)}
-                    className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3 py-2 text-sm text-brown-800 focus:border-terracotta-500 focus:outline-none [color-scheme:light]"
-                  />
-                  {!allDay && (
-                    <input
-                      type="time"
-                      value={startTime}
-                      onChange={e => setStartTime(e.target.value)}
-                      className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3 py-2 text-sm text-brown-800 focus:border-terracotta-500 focus:outline-none [color-scheme:light]"
+              <div className="space-y-3">
+                {/* Start Date & Time */}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <span className="text-xs font-semibold text-brown-700/60 sm:w-12 flex-shrink-0">
+                    Start
+                  </span>
+                  <div className="flex items-center gap-2 flex-1">
+                    <CustomDatePicker
+                      value={startDate}
+                      onChange={val => {
+                        setStartDate(val)
+                        if (val > endDate) {
+                          setEndDate(val)
+                        }
+                      }}
                     />
-                  )}
+                    {!allDay && (
+                      <CustomTimePicker
+                        value={startTime}
+                        onChange={setStartTime}
+                      />
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-brown-700/60">
-                    {allDay ? 'End date' : 'End'}
-                  </label>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={e => setEndDate(e.target.value)}
-                    className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3 py-2 text-sm text-brown-800 focus:border-terracotta-500 focus:outline-none [color-scheme:light]"
-                  />
-                  {!allDay && (
-                    <input
-                      type="time"
-                      value={endTime}
-                      onChange={e => setEndTime(e.target.value)}
-                      className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3 py-2 text-sm text-brown-800 focus:border-terracotta-500 focus:outline-none [color-scheme:light]"
+
+                {/* End Date & Time */}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <span className="text-xs font-semibold text-brown-700/60 sm:w-12 flex-shrink-0">
+                    End
+                  </span>
+                  <div className="flex items-center gap-2 flex-1">
+                    <CustomDatePicker
+                      value={endDate}
+                      onChange={setEndDate}
                     />
-                  )}
+                    {!allDay && (
+                      <CustomTimePicker
+                        value={endTime}
+                        onChange={setEndTime}
+                      />
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -258,6 +344,7 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-brown-700/60">Location</label>
                 <input
+                  ref={locationInputRef}
                   type="text"
                   value={location}
                   onChange={e => setLocation(e.target.value)}
@@ -393,6 +480,227 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
           </div>
         </form>
       </div>
+    </div>
+  )
+}
+
+function CustomDatePicker({
+  value,
+  onChange,
+  className = "",
+}: {
+  value: string // 'yyyy-MM-dd'
+  onChange: (val: string) => void
+  className?: string
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    return value ? parseISO(value) : new Date()
+  })
+  const popoverRef = useRef<HTMLDivElement>(null)
+
+  // Parse current value
+  const selectedDate = value ? parseISO(value) : new Date()
+
+  // Close popover when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside)
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [isOpen])
+
+  // Calendar calculations
+  const monthStart = startOfMonth(currentMonth)
+  const monthEnd = endOfMonth(monthStart)
+  const startDate = startOfWeek(monthStart)
+  const endDate = endOfWeek(monthEnd)
+
+  const days = eachDayOfInterval({ start: startDate, end: endDate })
+
+  const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1))
+  const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1))
+
+  return (
+    <div className="relative flex-1" ref={popoverRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={`w-full flex items-center justify-between gap-2 rounded-xl border border-sand-200 bg-cream-50 px-3 py-2 text-sm text-brown-800 hover:bg-cream-100 transition-colors focus:border-terracotta-500 focus:outline-none ${className}`}
+      >
+        <span>{format(selectedDate, "MMM d, yyyy")}</span>
+        <svg className="h-4 w-4 text-brown-700/40" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <rect x="3" y="4" width="14" height="14" rx="2" />
+          <line x1="16" y1="2" x2="16" y2="6" strokeLinecap="round" />
+          <line x1="8" y1="2" x2="8" y2="6" strokeLinecap="round" />
+          <line x1="3" y1="10" x2="17" y2="10" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div className="absolute top-full left-0 mt-1.5 z-[100] w-64 rounded-2xl border border-sand-200 bg-white p-3 shadow-xl animate-in fade-in zoom-in-95 duration-100">
+          {/* Calendar Header */}
+          <div className="flex items-center justify-between mb-2">
+            <button
+              type="button"
+              onClick={prevMonth}
+              className="p-1 rounded-lg text-brown-700/60 hover:bg-cream-100 transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <span className="text-xs font-semibold text-brown-800">
+              {format(currentMonth, "MMMM yyyy")}
+            </span>
+            <button
+              type="button"
+              onClick={nextMonth}
+              className="p-1 rounded-lg text-brown-700/60 hover:bg-cream-100 transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Day Names */}
+          <div className="grid grid-cols-7 gap-px text-center mb-1">
+            {["S", "M", "T", "W", "T", "F", "S"].map((day, idx) => (
+              <span key={idx} className="text-[10px] font-bold text-brown-700/40">
+                {day}
+              </span>
+            ))}
+          </div>
+
+          {/* Days Grid */}
+          <div className="grid grid-cols-7 gap-1">
+            {days.map((day, dayIdx) => {
+              const isSelected = isSameDay(day, selectedDate)
+              const isCurrentMonth = day.getMonth() === currentMonth.getMonth()
+              return (
+                <button
+                  key={dayIdx}
+                  type="button"
+                  onClick={() => {
+                    onChange(format(day, "yyyy-MM-dd"))
+                    setIsOpen(false)
+                  }}
+                  className={`h-7 w-7 text-xs rounded-full flex items-center justify-center font-medium transition-colors ${
+                    isSelected
+                      ? "bg-terracotta-500 text-white"
+                      : isCurrentMonth
+                      ? "text-brown-800 hover:bg-cream-100"
+                      : "text-brown-700/25 hover:bg-cream-50"
+                  }`}
+                >
+                  {format(day, "d")}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CustomTimePicker({
+  value,
+  onChange,
+  className = "",
+}: {
+  value: string // 'HH:mm'
+  onChange: (val: string) => void
+  className?: string
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const popoverRef = useRef<HTMLDivElement>(null)
+
+  // Generate list of 30-minute interval times
+  const times = useMemo(() => {
+    const list = []
+    for (let h = 0; h < 24; h++) {
+      for (const m of ["00", "30"]) {
+        const hh = h.toString().padStart(2, "0")
+        const timeStr = `${hh}:${m}`
+        // Format for display
+        const displayStr = format(parse(`${hh}:${m}`, "HH:mm", new Date()), "h:mm a")
+        list.push({ value: timeStr, display: displayStr })
+      }
+    }
+    return list
+  }, [])
+
+  // Close popover when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside)
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [isOpen])
+
+  // Get current display string
+  const activeDisplay = useMemo(() => {
+    try {
+      return format(parse(value, "HH:mm", new Date()), "h:mm a")
+    } catch {
+      return value
+    }
+  }, [value])
+
+  return (
+    <div className="relative w-28" ref={popoverRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={`w-full flex items-center justify-between gap-1 rounded-xl border border-sand-200 bg-cream-50 px-3 py-2 text-sm text-brown-800 hover:bg-cream-100 transition-colors focus:border-terracotta-500 focus:outline-none ${className}`}
+      >
+        <span>{activeDisplay}</span>
+        <svg className="h-4 w-4 text-brown-700/40" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <circle cx="10" cy="10" r="7" />
+          <polyline points="10 6 10 10 13 10" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div className="absolute top-full right-0 mt-1.5 z-[100] w-36 rounded-2xl border border-sand-200 bg-white shadow-xl max-h-48 overflow-y-auto p-1.5 animate-in fade-in zoom-in-95 duration-100 scrollbar-hide">
+          {times.map((t) => {
+            const isSelected = t.value === value
+            return (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => {
+                  onChange(t.value)
+                  setIsOpen(false)
+                }}
+                className={`w-full text-left px-3 py-1.5 text-xs rounded-xl font-medium transition-colors ${
+                  isSelected
+                    ? "bg-terracotta-500 text-white"
+                    : "text-brown-800 hover:bg-cream-100"
+                }`}
+              >
+                {t.display}
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
