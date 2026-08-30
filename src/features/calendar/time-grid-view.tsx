@@ -11,7 +11,7 @@ interface TimeGridViewProps {
   onCellClick?: (day: Date) => void
 }
 
-const HOUR_HEIGHT = 56 // height in pixels of one hour slot
+const HOUR_HEIGHT = 72 // height in pixels of one hour slot
 
 function formatHourLabel(h: number): string {
   if (h === 0) return '12 AM'
@@ -197,19 +197,19 @@ export function TimeGridView({
             return (
               <div
                 key={day.toISOString()}
-                className={`text-center py-1 flex flex-col items-center gap-1 ${
+                className={`text-center py-1.5 flex flex-col items-center gap-1 ${
                   isCurrentDay ? 'text-terracotta-500' : 'text-brown-700/60'
                 }`}
               >
-                <span className="text-[10px] font-semibold uppercase tracking-wider">
+                <span className="text-[11px] font-semibold uppercase tracking-wider">
                   {format(day, 'E')}
                 </span>
                 {isCurrentDay ? (
-                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-terracotta-500 text-white text-xs font-bold leading-none shadow-sm">
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-terracotta-500 text-white text-sm font-bold leading-none shadow-sm">
                     {format(day, 'd')}
                   </span>
                 ) : (
-                  <span className="text-sm font-bold text-brown-800">
+                  <span className="text-base font-bold text-brown-800">
                     {format(day, 'd')}
                   </span>
                 )}
@@ -233,7 +233,7 @@ export function TimeGridView({
             const birthdayEvents = dayAllDay.filter(isBirthdayEvent)
             const otherAllDay = dayAllDay.filter(ev => !isBirthdayEvent(ev))
             return (
-              <div key={`all-day-${key}`} className="px-1.5 space-y-0.5 min-h-[22px]">
+              <div key={`all-day-${key}`} className="px-2 space-y-1 min-h-[28px]">
                 {birthdayEvents.length > 0 && (
                   <BirthdayGroupPill
                     events={birthdayEvents}
@@ -252,7 +252,7 @@ export function TimeGridView({
                     <div
                       key={ev.id}
                       onClick={() => onEventClick?.(ev)}
-                      className="rounded px-1.5 py-0.5 text-[10px] font-semibold truncate cursor-pointer hover:brightness-95 transition-all"
+                      className="rounded px-2 py-1 text-[11px] font-semibold truncate cursor-pointer hover:brightness-95 transition-all"
                       style={{ backgroundColor: styles.backgroundColor, color: styles.textColor, borderLeft: `3px solid ${styles.borderColor}` }}
                       title={ev.title}
                     >
@@ -278,7 +278,7 @@ export function TimeGridView({
             {hours.map((h) => (
               <div
                 key={h}
-                className="absolute text-right pr-2 text-[10px] font-semibold text-brown-700/35 uppercase select-none w-full"
+                className="absolute text-right pr-2 text-[11px] font-semibold text-brown-700/35 uppercase select-none w-full"
                 style={{ top: `${h * HOUR_HEIGHT - 6}px` }}
               >
                 {h !== 0 ? formatHourLabel(h) : ''}
@@ -326,8 +326,8 @@ export function TimeGridView({
                     const ruleColor = applyColorRules(ev.title, colorRules)
                     const color = ruleColor ?? calendarColor ?? ev.color ?? '#5B7FB5'
                     const styles = getEventThemeStyles(color)
-                    const isShort = height < 38
-                    const isTall = height > 56
+                    const isShort = height < 44
+                    const isTall = height > 72
 
                     return (
                       <div
@@ -336,8 +336,8 @@ export function TimeGridView({
                           e.stopPropagation()
                           onEventClick?.(ev)
                         }}
-                        className={`rounded-md px-2 flex flex-col justify-between hover:brightness-95 active:brightness-90 transition-all select-none border-l-[3.5px] shadow-[0_1px_2px_rgba(0,0,0,0.02)] z-10 ${
-                          isShort ? 'py-0.5 justify-center' : 'py-1.5'
+                        className={`rounded-md px-2.5 flex flex-col justify-between hover:brightness-95 active:brightness-90 transition-all select-none border-l-[4px] shadow-[0_1px_2px_rgba(0,0,0,0.02)] z-10 ${
+                          isShort ? 'py-1 justify-center' : 'py-2'
                         }`}
                         style={{
                           position: 'absolute',
@@ -352,22 +352,22 @@ export function TimeGridView({
                       >
                         {isShort ? (
                           <div className="flex items-center justify-between gap-1 w-full min-w-0 h-full">
-                            <span className="font-bold text-[10.5px] leading-none truncate" style={{ color: styles.textColor }}>
+                            <span className="font-bold text-[12px] leading-none truncate" style={{ color: styles.textColor }}>
                               {ev.title}
                             </span>
                             {!ev.all_day && (
-                              <span className="text-[9px] font-semibold opacity-70 flex-shrink-0" style={{ color: styles.textColor }}>
+                              <span className="text-[10px] font-semibold opacity-70 flex-shrink-0" style={{ color: styles.textColor }}>
                                 {formatTimeShort(ev.start_at)}
                               </span>
                             )}
                           </div>
                         ) : !isTall ? (
                           <div className="flex flex-col justify-between h-full min-w-0">
-                            <p className="font-bold text-[11px] leading-tight line-clamp-2 break-words" style={{ color: styles.textColor }}>
+                            <p className="font-bold text-[13px] leading-tight line-clamp-2 break-words" style={{ color: styles.textColor }}>
                               {ev.title}
                             </p>
                             {!ev.all_day && (
-                              <p className="text-[9px] font-semibold opacity-70 leading-none flex-shrink-0" style={{ color: styles.textColor }}>
+                              <p className="text-[10px] font-semibold opacity-70 leading-none flex-shrink-0" style={{ color: styles.textColor }}>
                                 {formatTimeRange(ev.start_at, ev.end_at)}
                               </p>
                             )}
@@ -375,18 +375,18 @@ export function TimeGridView({
                         ) : (
                           <div className="flex flex-col h-full justify-between min-w-0">
                             <div className="min-w-0">
-                              <p className="font-bold text-[11.5px] leading-snug line-clamp-2 break-words" style={{ color: styles.textColor }}>
+                              <p className="font-bold text-[13.5px] leading-snug line-clamp-2 break-words" style={{ color: styles.textColor }}>
                                 {ev.title}
                               </p>
                               {ev.location && (
-                                <p className="text-[9px] truncate opacity-70 mt-0.5 flex items-center gap-0.5" style={{ color: styles.textColor }}>
-                                  <span className="text-[10px]">📍</span>
+                                <p className="text-[10px] truncate opacity-70 mt-0.5 flex items-center gap-0.5" style={{ color: styles.textColor }}>
+                                  <span className="text-[11px]">📍</span>
                                   <span className="truncate">{ev.location}</span>
                                 </p>
                               )}
                             </div>
                             {!ev.all_day && (
-                              <p className="text-[9px] font-semibold opacity-70 leading-none flex-shrink-0" style={{ color: styles.textColor }}>
+                              <p className="text-[10px] font-semibold opacity-70 leading-none flex-shrink-0" style={{ color: styles.textColor }}>
                                 {formatTimeRange(ev.start_at, ev.end_at)}
                               </p>
                             )}
@@ -442,7 +442,7 @@ function BirthdayGroupPill({
     return (
       <div
         onClick={() => onClickEvent?.(firstEv)}
-        className="rounded px-1.5 py-0.5 text-[10px] font-semibold truncate cursor-pointer hover:brightness-95 transition-all"
+        className="rounded px-2 py-1 text-[11px] font-semibold truncate cursor-pointer hover:brightness-95 transition-all"
         style={{ backgroundColor: styles.backgroundColor, color: styles.textColor, borderLeft: `3px solid ${styles.borderColor}` }}
         title={firstEv.title}
       >
@@ -453,10 +453,10 @@ function BirthdayGroupPill({
 
   return (
     <div
-      className="rounded px-1.5 py-1 text-[10px] font-semibold flex flex-col gap-0.5"
+      className="rounded px-2 py-1 text-[11px] font-semibold flex flex-col gap-0.5"
       style={{ backgroundColor: styles.backgroundColor, borderLeft: `3px solid ${styles.borderColor}` }}
     >
-      <span className="text-[8px] uppercase tracking-wider font-bold opacity-80" style={{ color: styles.textColor }}>
+      <span className="text-[9px] uppercase tracking-wider font-bold opacity-80" style={{ color: styles.textColor }}>
         🎂 Birthdays
       </span>
       <div className="flex flex-col gap-0.5">
