@@ -299,7 +299,7 @@ These go in `.env.local` for development and in Vercel's environment variables f
 
 ## Important Constraints
 
-- **No terminal for git.** All version control via GitHub Desktop. Never instruct the user to run git commands.
+- **Git commands are allowed.** You may use git add, commit, push, and other git commands directly in the terminal to deploy and manage version control.
 - **No separate backend server.** Everything goes through Supabase.
 - **No dark mode.** The app is always warm cream.
 - **iPad landscape is the primary design target.** Don't optimize for mobile first.
