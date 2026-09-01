@@ -122,7 +122,7 @@ export function TimeGridView({
                     <div
                       key={ev.id}
                       onClick={() => onEventClick?.(ev)}
-                      className="rounded px-2 py-1 text-[11px] font-semibold truncate cursor-pointer hover:brightness-95 transition-all"
+                      className="rounded-md px-2.5 py-1.5 text-[12.5px] font-bold truncate cursor-pointer hover:brightness-95 transition-all"
                       style={{ backgroundColor: styles.backgroundColor, color: styles.textColor, borderLeft: `3px solid ${styles.borderColor}` }}
                       title={ev.title}
                     >
@@ -245,7 +245,7 @@ function BirthdayGroupPill({
     return (
       <div
         onClick={() => onClickEvent?.(firstEv)}
-        className="rounded px-2 py-1 text-[11px] font-semibold truncate cursor-pointer hover:brightness-95 transition-all"
+        className="rounded-md px-2.5 py-1.5 text-[12.5px] font-bold truncate cursor-pointer hover:brightness-95 transition-all"
         style={{ backgroundColor: styles.backgroundColor, color: styles.textColor, borderLeft: `3px solid ${styles.borderColor}` }}
         title={firstEv.title}
       >
@@ -257,7 +257,7 @@ function BirthdayGroupPill({
   return (
     <div
       onClick={() => onClickEvent?.(firstEv)}
-      className="rounded px-2 py-1 text-[11px] font-semibold truncate cursor-pointer hover:brightness-95 transition-all"
+      className="rounded-md px-2.5 py-1.5 text-[12.5px] font-bold truncate cursor-pointer hover:brightness-95 transition-all"
       style={{ backgroundColor: styles.backgroundColor, color: styles.textColor, borderLeft: `3px solid ${styles.borderColor}` }}
       title={events.map(e => extractBirthdayName(e.title)).join(', ')}
     >
