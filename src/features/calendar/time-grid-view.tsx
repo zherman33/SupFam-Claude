@@ -94,48 +94,6 @@ export function TimeGridView({
         </div>
       </div>
 
-      {/* ── All-Day Events row ── */}
-      <div className="flex flex-shrink-0 border-b border-sand-200 bg-[#FAF9F5]/40 py-1">
-        <div className="flex-1 grid grid-cols-7 divide-x divide-sand-200">
-          {week.map((day) => {
-            const key = format(day, 'yyyy-MM-dd')
-            const dayAllDay = (eventsByDate.get(key) ?? []).filter(e => e.all_day)
-            const birthdayEvents = dayAllDay.filter(isBirthdayEvent)
-            const otherAllDay = dayAllDay.filter(ev => !isBirthdayEvent(ev))
-            return (
-              <div key={`all-day-${key}`} className="px-2 space-y-1 min-h-[28px]">
-                {birthdayEvents.length > 0 && (
-                  <BirthdayGroupPill
-                    events={birthdayEvents}
-                    colorRules={colorRules}
-                    calendars={calendars}
-                    onClickEvent={onEventClick}
-                  />
-                )}
-                 {otherAllDay.map((ev) => {
-                  const calendar = calendars?.find(c => c.calendar_id === ev.source_calendar_id)
-                  const calendarColor = calendar?.color
-                  const ruleColor = applyColorRules(ev.title, colorRules)
-                  const color = ruleColor ?? calendarColor ?? ev.color ?? '#5B7FB5'
-                  const styles = getEventThemeStyles(color)
-                  return (
-                    <div
-                      key={ev.id}
-                      onClick={() => onEventClick?.(ev)}
-                      className="rounded-md px-2.5 py-1.5 text-[12.5px] font-bold truncate cursor-pointer hover:brightness-95 transition-all"
-                      style={{ backgroundColor: styles.backgroundColor, color: styles.textColor, borderLeft: `3px solid ${styles.borderColor}` }}
-                      title={ev.title}
-                    >
-                      {ev.title}
-                    </div>
-                  )
-                })}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
       {/* ── Non-Scrolling Stacked Grid ── */}
       <div className="flex-1 relative bg-white overflow-hidden">
         <div className="absolute inset-0 grid grid-cols-7 divide-x divide-sand-200">
@@ -144,7 +102,11 @@ export function TimeGridView({
             const dayEvents = eventsByDate.get(key) ?? []
             const isCurrentDay = isToday(day)
 
-            // Only non-all-day events, sorted chronologically
+            // Split into all-day and timed events
+            const dayAllDay = dayEvents.filter(e => e.all_day)
+            const birthdayEvents = dayAllDay.filter(isBirthdayEvent)
+            const otherAllDay = dayAllDay.filter(ev => !isBirthdayEvent(ev))
+
             const nonAllDay = dayEvents.filter(e => !e.all_day)
             nonAllDay.sort((a, b) => a.start_at.localeCompare(b.start_at))
 
@@ -162,6 +124,35 @@ export function TimeGridView({
                 )}
 
                 <div className="flex flex-col gap-1.5 z-20 overflow-y-auto scrollbar-hide h-full">
+                  {/* All-Day Events first */}
+                  {birthdayEvents.length > 0 && (
+                    <BirthdayGroupPill
+                      events={birthdayEvents}
+                      colorRules={colorRules}
+                      calendars={calendars}
+                      onClickEvent={onEventClick}
+                    />
+                  )}
+                  {otherAllDay.map((ev) => {
+                    const calendar = calendars?.find(c => c.calendar_id === ev.source_calendar_id)
+                    const calendarColor = calendar?.color
+                    const ruleColor = applyColorRules(ev.title, colorRules)
+                    const color = ruleColor ?? calendarColor ?? ev.color ?? '#5B7FB5'
+                    const styles = getEventThemeStyles(color)
+                    return (
+                      <div
+                        key={ev.id}
+                        onClick={(e) => { e.stopPropagation(); onEventClick?.(ev) }}
+                        className="rounded-md px-2.5 py-1.5 text-[12.5px] font-bold truncate cursor-pointer hover:brightness-95 transition-all shrink-0"
+                        style={{ backgroundColor: styles.backgroundColor, color: styles.textColor, borderLeft: `3px solid ${styles.borderColor}` }}
+                        title={ev.title}
+                      >
+                        {ev.title}
+                      </div>
+                    )
+                  })}
+
+                  {/* Timed Events */}
                   {nonAllDay.map((ev) => {
                     const calendar = calendars?.find(c => c.calendar_id === ev.source_calendar_id)
                     const calendarColor = calendar?.color
