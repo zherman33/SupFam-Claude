@@ -128,16 +128,23 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
     }
   }, [mapsLoaded])
 
-  // Calendar to save to — default to user's default calendar
+  // Calendar to save to — default to user's default calendar (connected_calendars UUID)
   // For edits, use the source calendar of the event
-  const [selectedCalendarId, setSelectedCalendarId] = useState<string>(
-    event?.source_calendar_id ?? defaultCal?.calendar_id ?? ''
-  )
+  const [selectedCalendarId, setSelectedCalendarId] = useState<string>(() => {
+    if (event && calendars) {
+      const cal = calendars.find(c => 
+        c.calendar_id === event.source_calendar_id && 
+        c.family_member_id === event.created_by
+      )
+      if (cal) return cal.id
+    }
+    return defaultCal?.id ?? ''
+  })
   
   // Which family member owns the selected calendar
   const selectedMemberId = useMemo(() => {
     if (calendars && selectedCalendarId) {
-      const cal = calendars.find(c => c.calendar_id === selectedCalendarId)
+      const cal = calendars.find(c => c.id === selectedCalendarId)
       if (cal) return cal.family_member_id
     }
     return member?.id ?? ''
@@ -146,12 +153,20 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
   // Attendees — pre-populate from existing event if editing
   const [attendeeEmails, setAttendeeEmails] = useState<Set<string>>(new Set())
 
-  // Update selectedCalendarId when defaultCal loads
+  // Update selectedCalendarId when defaultCal or calendars load
   useEffect(() => {
-    if (!isEdit && defaultCal && !selectedCalendarId) {
-      setSelectedCalendarId(defaultCal.calendar_id)
+    if (!selectedCalendarId && calendars) {
+      if (isEdit && event) {
+        const cal = calendars.find(c => 
+          c.calendar_id === event.source_calendar_id && 
+          c.family_member_id === event.created_by
+        )
+        if (cal) setSelectedCalendarId(cal.id)
+      } else if (defaultCal) {
+        setSelectedCalendarId(defaultCal.id)
+      }
     }
-  }, [defaultCal, isEdit, selectedCalendarId])
+  }, [defaultCal, calendars, isEdit, event, selectedCalendarId])
 
   // Toggle an attendee email
   const toggleAttendee = (email: string) => {
@@ -194,9 +209,10 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
     if (!title.trim() || !selectedCalendarId || !selectedMemberId) return
     setError(null)
 
+    const selectedCal = calendars?.find(c => c.id === selectedCalendarId)
     const payload = {
       event: buildEventPayload(),
-      calendarId: selectedCalendarId,
+      calendarId: selectedCal?.calendar_id ?? '',
       familyMemberId: selectedMemberId,
     }
 
@@ -216,9 +232,10 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
   const handleDelete = async () => {
     if (!event?.external_event_id || !selectedCalendarId || !selectedMemberId) return
     if (!confirm('Delete this event?')) return
+    const selectedCal = calendars?.find(c => c.id === selectedCalendarId)
     await deleteEvent.mutateAsync({
       eventId: event.external_event_id,
-      calendarId: selectedCalendarId,
+      calendarId: selectedCal?.calendar_id ?? '',
       familyMemberId: selectedMemberId,
     })
     onClose()

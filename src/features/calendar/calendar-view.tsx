@@ -97,6 +97,9 @@ export function CalendarView({
     )
   }, [anchor])
 
+  // Flattened array of all days for day-by-day continuous scrolling
+  const allDays = useMemo(() => allWeeks.flat(), [allWeeks])
+
   // ── Snap row indices ────────────────────────────────────────────────────
   // Snap to every week row in all modes to allow smooth, non-skipping scrolling
   const snapRows = useMemo(() => {
@@ -109,8 +112,8 @@ export function CalendarView({
 
   // ── Scroll state ────────────────────────────────────────────────────────
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [topWeekIdx, setTopWeekIdx] = useState(WEEKS_BEFORE)
-  const topWeekIdxRef = useRef(WEEKS_BEFORE)
+  const [topDayIdx, setTopDayIdx] = useState(WEEKS_BEFORE * 7)
+  const topDayIdxRef = useRef(WEEKS_BEFORE * 7)
   const [isTouchDevice, setIsTouchDevice] = useState(false)
 
   // Keep track of the synced date ranges to avoid redundant API/DB calls
@@ -130,41 +133,38 @@ export function CalendarView({
     syncedRangesRef.current = [{ start, end }]
   }, [today])
 
-  // Check if we need to sync when scrolling to a new week
+  // Check if we need to sync when scrolling to a new day or week
   useEffect(() => {
     if (!onSyncRange) return
 
-    const currentWeek = allWeeks[topWeekIdx]
-    if (!currentWeek || currentWeek.length === 0) return
-
-    const weekStart = currentWeek[0]
+    const currentDay = allDays[topDayIdx]
+    if (!currentDay) return
     
-    // Check if the week start date is covered by any synced range
+    // Check if the current day is covered by any synced range
     const isCovered = syncedRangesRef.current.some(
-      (range) => weekStart >= range.start && weekStart <= range.end
+      (range) => currentDay >= range.start && currentDay <= range.end
     )
 
     if (!isCovered) {
-      // Trigger sync for this week and an additional 2 weeks worth (total 3 weeks / 21 days)
-      const syncStart = new Date(weekStart)
-      const syncEnd = new Date(weekStart)
-      syncEnd.setDate(weekStart.getDate() + 21)
+      // Trigger sync for this day and an additional 3 weeks worth (21 days)
+      const syncStart = new Date(currentDay)
+      const syncEnd = new Date(currentDay)
+      syncEnd.setDate(currentDay.getDate() + 21)
 
       // Add to synced ranges first to avoid duplicate requests during transit
       syncedRangesRef.current.push({ start: syncStart, end: syncEnd })
       
       onSyncRange(syncStart, syncEnd)
     }
-  }, [topWeekIdx, allWeeks, onSyncRange, today])
+  }, [topDayIdx, allDays, onSyncRange, today])
 
   const handleManualRefresh = () => {
-    const currentWeek = allWeeks[topWeekIdx]
-    const weekStart = currentWeek ? currentWeek[0] : today
+    const currentDay = allDays[topDayIdx] ?? today
     
-    const start = new Date(weekStart)
-    start.setDate(weekStart.getDate() - 7)
-    const end = new Date(weekStart)
-    end.setDate(weekStart.getDate() + 35)
+    const start = new Date(currentDay)
+    start.setDate(currentDay.getDate() - 7)
+    const end = new Date(currentDay)
+    end.setDate(currentDay.getDate() + 35)
     
     syncedRangesRef.current = [{ start, end }]
     
@@ -175,54 +175,88 @@ export function CalendarView({
     }
   }
 
-  // Scroll to today's week on mount / mode change / today change
+  // Scroll to active week on mount / mode change / today change for 3week and month views
   useEffect(() => {
+    if (mode === 'week') return
     const el = scrollRef.current
     if (!el) return
     
     // Set a layout-safe timer to calculate the dimensions once the grid is laid out
     const timer = setTimeout(() => {
       const rowH = el.scrollHeight / TOTAL_WEEKS
-      const scrollRow = WEEKS_BEFORE
+      const scrollWeek = Math.floor(topDayIdxRef.current / 7)
       
-      el.scrollTop = scrollRow * rowH
-      setTopWeekIdx(scrollRow)
-      topWeekIdxRef.current = scrollRow
+      el.scrollTop = scrollWeek * rowH
     }, 50)
 
     return () => clearTimeout(timer)
   }, [mode, today])
+
+  const handleNavigate = (direction: -1 | 1) => {
+    if (mode === 'week') {
+      const target = Math.max(0, Math.min(allDays.length - 7, topDayIdx + direction * 7))
+      setTopDayIdx(target)
+      topDayIdxRef.current = target
+    } else {
+      const stepWeeks = mode === 'month' ? 4 : 3
+      const currentWeek = Math.floor(topDayIdx / 7)
+      const targetWeek = Math.max(0, Math.min(TOTAL_WEEKS - 1, currentWeek + direction * stepWeeks))
+      const targetDay = targetWeek * 7
+      if (scrollRef.current) {
+        const rowH = scrollRef.current.scrollHeight / TOTAL_WEEKS
+        scrollRef.current.scrollTo({ top: targetWeek * rowH, behavior: 'smooth' })
+      }
+      setTopDayIdx(targetDay)
+      topDayIdxRef.current = targetDay
+    }
+  }
+
+  const handleJumpToToday = () => {
+    const target = WEEKS_BEFORE * 7
+    if (mode === 'week') {
+      setTopDayIdx(target)
+      topDayIdxRef.current = target
+    } else {
+      if (scrollRef.current) {
+        const rowH = scrollRef.current.scrollHeight / TOTAL_WEEKS
+        scrollRef.current.scrollTo({ top: WEEKS_BEFORE * rowH, behavior: 'smooth' })
+      }
+      setTopDayIdx(target)
+      topDayIdxRef.current = target
+    }
+  }
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current
     if (!el) return
     const rowH = el.scrollHeight / TOTAL_WEEKS
     const topRow = Math.round(el.scrollTop / rowH)
-    if (topWeekIdxRef.current !== topRow) {
-      topWeekIdxRef.current = topRow
-      setTopWeekIdx(topRow)
+    const newDayIdx = topRow * 7
+    if (topDayIdxRef.current !== newDayIdx) {
+      topDayIdxRef.current = newDayIdx
+      setTopDayIdx(newDayIdx)
     }
   }, [])
 
   const monthLabel = useMemo(() => {
-    const midRow = Math.min(topWeekIdx + Math.floor(rowsPerPage / 2), TOTAL_WEEKS - 1)
-    const labelDay = allWeeks[midRow]?.[3] ?? today
-    return mode === 'week'
-      ? (() => {
-          const ws = allWeeks[topWeekIdx]?.[0] ?? today
-          const we = allWeeks[topWeekIdx]?.[6] ?? today
-          return format(ws, 'MMM') === format(we, 'MMM')
-            ? `${format(ws, 'MMM d')}\u2013${format(we, 'd, yyyy')}`
-            : `${format(ws, 'MMM d')} \u2013 ${format(we, 'MMM d')}`
-        })()
-      : mode === '3week'
-      ? (() => {
-          const ws = allWeeks[topWeekIdx]?.[0] ?? today
-          const we = allWeeks[Math.min(topWeekIdx + 2, TOTAL_WEEKS - 1)]?.[6] ?? today
-          return `${format(ws, 'MMM d')} \u2013 ${format(we, 'MMM d')}`
-        })()
-      : format(labelDay, 'MMMM yyyy')
-  }, [allWeeks, topWeekIdx, mode, rowsPerPage, today])
+    if (mode === 'week') {
+      const ws = allDays[topDayIdx] ?? today
+      const we = allDays[topDayIdx + 6] ?? today
+      return format(ws, 'MMM') === format(we, 'MMM')
+        ? `${format(ws, 'MMM d')}\u2013${format(we, 'd, yyyy')}`
+        : `${format(ws, 'MMM d')} \u2013 ${format(we, 'MMM d')}`
+    } else if (mode === '3week') {
+      const topWeek = Math.floor(topDayIdx / 7)
+      const ws = allWeeks[topWeek]?.[0] ?? today
+      const we = allWeeks[Math.min(topWeek + 2, TOTAL_WEEKS - 1)]?.[6] ?? today
+      return `${format(ws, 'MMM d')} \u2013 ${format(we, 'MMM d')}`
+    } else {
+      const topWeek = Math.floor(topDayIdx / 7)
+      const midRow = Math.min(topWeek + Math.floor(rowsPerPage / 2), TOTAL_WEEKS - 1)
+      const labelDay = allWeeks[midRow]?.[3] ?? today
+      return format(labelDay, 'MMMM yyyy')
+    }
+  }, [allWeeks, allDays, topDayIdx, mode, rowsPerPage, today])
 
   // ── Index tasks ──────────────────────────────────────────────────────────
   const tasksByDate = useMemo(() => {
@@ -288,46 +322,70 @@ export function CalendarView({
     <div className="flex h-full flex-col select-none overflow-hidden">
 
       {/* ── Header ── */}
-      <div className="relative flex-shrink-0 flex items-center h-9 mb-2">
-        {/* Left controls — Quick Toggle calendars */}
-        {quickToggleCalendars.length > 0 && (
-          <div className="flex items-center gap-1.5 relative z-10 mr-auto overflow-x-auto no-scrollbar max-w-[42%] py-0.5">
-            {quickToggleCalendars.map(cal => {
-              const color = cal.color ?? '#C4714F'
-              const isVisible = cal.is_visible
-              return (
-                <button
-                  key={cal.id}
-                  type="button"
-                  onClick={() => toggleVisibility.mutate({ id: cal.id, is_visible: !isVisible })}
-                  title={`${cal.calendar_name ?? cal.calendar_id} (${isVisible ? 'Currently visible — click to hide' : 'Currently hidden — click to show'})`}
-                  className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex-shrink-0 ${
-                    isVisible
-                      ? 'shadow-sm active:scale-95'
-                      : 'bg-white border border-sand-200 text-brown-700/50 hover:bg-cream-50 hover:text-brown-700 active:scale-95'
-                  }`}
-                  style={
-                    isVisible
-                      ? {
-                          backgroundColor: `${color}18`,
-                          border: `1px solid ${color}40`,
-                          color: darkenForReadability(color),
-                        }
-                      : undefined
-                  }
-                >
-                  <span
-                    className={`h-2 w-2 rounded-full flex-shrink-0 transition-opacity ${isVisible ? 'opacity-100' : 'opacity-40'}`}
-                    style={{ backgroundColor: color }}
-                  />
-                  <span className="truncate max-w-[120px]">
-                    {cal.calendar_name ?? cal.calendar_id}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        )}
+      <div className="relative flex-shrink-0 flex items-center h-9 mb-2 z-50">
+        {/* Left controls — Nav arrows + Today + Quick Toggle calendars */}
+        <div className="flex items-center gap-1.5 relative z-10 mr-auto max-w-[48%] overflow-x-auto no-scrollbar py-0.5">
+          <button
+            onClick={() => handleNavigate(-1)}
+            aria-label="Previous"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-brown-700/60 hover:bg-sand-100 hover:text-brown-800 active:bg-sand-200 transition-colors flex-shrink-0"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
+              <path d="M10 12L6 8L10 4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <button
+            onClick={() => handleNavigate(1)}
+            aria-label="Next"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-brown-700/60 hover:bg-sand-100 hover:text-brown-800 active:bg-sand-200 transition-colors flex-shrink-0"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
+              <path d="M6 4L10 8L6 12" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          {topDayIdx !== WEEKS_BEFORE * 7 && (
+            <button
+              onClick={handleJumpToToday}
+              className="rounded-md bg-sand-100 hover:bg-sand-200 px-2 py-0.5 text-[11px] font-semibold text-brown-700 active:opacity-75 transition-colors flex-shrink-0"
+            >
+              Today
+            </button>
+          )}
+          {quickToggleCalendars.length > 0 && quickToggleCalendars.map(cal => {
+            const color = cal.color ?? '#C4714F'
+            const isVisible = cal.is_visible
+            return (
+              <button
+                key={cal.id}
+                type="button"
+                onClick={() => toggleVisibility.mutate({ id: cal.id, is_visible: !isVisible })}
+                title={`${cal.calendar_name ?? cal.calendar_id} (${isVisible ? 'Currently visible — click to hide' : 'Currently hidden — click to show'})`}
+                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex-shrink-0 ${
+                  isVisible
+                    ? 'shadow-sm active:scale-95'
+                    : 'bg-white border border-sand-200 text-brown-700/50 hover:bg-cream-50 hover:text-brown-700 active:scale-95'
+                }`}
+                style={
+                  isVisible
+                    ? {
+                        backgroundColor: `${color}18`,
+                        border: `1px solid ${color}40`,
+                        color: darkenForReadability(color),
+                      }
+                    : undefined
+                }
+              >
+                <span
+                  className={`h-2 w-2 rounded-full flex-shrink-0 transition-opacity ${isVisible ? 'opacity-100' : 'opacity-40'}`}
+                  style={{ backgroundColor: color }}
+                />
+                <span className="truncate max-w-[120px]">
+                  {cal.calendar_name ?? cal.calendar_id}
+                </span>
+              </button>
+            )
+          })}
+        </div>
 
         {/* Month label — absolutely centered; tapping triggers a sync refresh */}
         <div className="absolute inset-x-0 flex items-center justify-center pointer-events-none">
@@ -378,7 +436,9 @@ export function CalendarView({
       {mode === 'week' ? (
         <div className="flex-1 min-h-0">
           <TimeGridView
-            week={allWeeks[topWeekIdx] ?? today}
+            allDays={allDays}
+            activeDayIdx={topDayIdx}
+            onDayChange={setTopDayIdx}
             events={events}
             onEventClick={(ev) => setEditEvent(ev)}
             onCellClick={(day) => setFormDate(day)}

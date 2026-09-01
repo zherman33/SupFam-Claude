@@ -153,46 +153,34 @@ Deno.serve(async (req) => {
           const existing = existingMap.get(cal.id)
           const colorToUse = existing?.color ?? cal.backgroundColor ?? null
 
-          let eventsRes = await fetch(
-            `${GOOGLE_CALENDAR_BASE}/calendars/${encodeURIComponent(cal.id)}/events?` +
-              new URLSearchParams({
-                timeMin: timeMin.toISOString(),
-                timeMax: timeMax.toISOString(),
-                singleEvents: "true",
-                orderBy: "startTime",
-                maxResults: "500",
-              }),
-            { headers: { Authorization: `Bearer ${accessToken}` } }
-          )
+          let pageToken: string | undefined = undefined
+          const events: any[] = []
 
-          if (eventsRes.status === 401 && tok.refresh_token) {
-            try {
-              accessToken = await refreshAccessToken(
-                tok.refresh_token,
-                tok.family_member_id,
-                supabase
-              )
-              eventsRes = await fetch(
-                `${GOOGLE_CALENDAR_BASE}/calendars/${encodeURIComponent(cal.id)}/events?` +
-                  new URLSearchParams({
-                    timeMin: timeMin.toISOString(),
-                    timeMax: timeMax.toISOString(),
-                    singleEvents: "true",
-                    orderBy: "startTime",
-                    maxResults: "500",
-                  }),
-                { headers: { Authorization: `Bearer ${accessToken}` } }
-              )
-            } catch (refErr: any) {
-              console.error(`Token refresh failed on events fetch for ${member.display_name}:`, refErr)
-              continue
+          do {
+            const queryParams = new URLSearchParams({
+              timeMin: timeMin.toISOString(),
+              timeMax: timeMax.toISOString(),
+              singleEvents: "true",
+              orderBy: "startTime",
+              maxResults: "2500", // Max allowed by Google
+            })
+            if (pageToken) {
+              queryParams.set("pageToken", pageToken)
             }
-          }
 
-          if (!eventsRes.ok) continue
+            const eventsRes = await fetch(
+              `${GOOGLE_CALENDAR_BASE}/calendars/${encodeURIComponent(cal.id)}/events?` + queryParams,
+              { headers: { Authorization: `Bearer ${accessToken}` } }
+            )
 
-          const eventsData = await eventsRes.json()
-          const events: any[] = eventsData.items ?? []
+            if (!eventsRes.ok) break
+
+            const eventsData = await eventsRes.json()
+            if (eventsData.items) {
+              events.push(...eventsData.items)
+            }
+            pageToken = eventsData.nextPageToken
+          } while (pageToken)
 
           // Pre-fetch existing DB events for this calendar inside the sync window
           const { data: existingEvents } = await supabase

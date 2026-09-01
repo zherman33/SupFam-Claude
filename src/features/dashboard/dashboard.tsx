@@ -49,7 +49,10 @@ export function Dashboard() {
   const visibleEvents = events?.filter(ev => {
     if (!calendars) return true
     if (!ev.source_calendar_id) return true
-    const cal = calendars.find(c => c.calendar_id === ev.source_calendar_id)
+    const cal = calendars.find(c => 
+      c.calendar_id === ev.source_calendar_id &&
+      (!ev.created_by || c.family_member_id === ev.created_by)
+    )
     return cal ? cal.is_visible : true
   })
 

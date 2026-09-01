@@ -28,7 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return
 
-    const sub = App.addListener('appUrlOpen', async (event) => {
+    const sub = App.addListener('appUrlOpen', async (event: { url: string }) => {
       if (event.url.startsWith('com.supfam.app://')) {
         try {
           await Browser.close()
@@ -49,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const { data: { session } } = await supabase.auth.setSession({ access_token, refresh_token })
             if (session && provider_token) {
               const expiresAt = expires_in ? new Date(Date.now() + parseInt(expires_in) * 1000).toISOString() : null
-              pendingTokens.set(session.user.id, {
+              setPendingToken(session.user.id, {
                 access: provider_token,
                 refresh: provider_refresh_token ?? null,
                 expiresAt,
@@ -65,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
 
     return () => {
-      sub.then((listener) => listener.remove())
+      sub.then((listener: { remove: () => void }) => listener.remove())
     }
   }, [])
 
@@ -185,11 +185,53 @@ export function useAuth() {
 }
 
 /**
- * In-memory token cache: if a user signs in before their family_member
- * row exists (new user joining a family), we hold the token here and
+ * LocalStorage-backed token cache: if a user signs in before their family_member
+ * row exists (new user joining a family), we hold the token in localStorage and
  * flush it once the member row is created (called from FamilySetup.onComplete).
+ * This ensures the token survives page reloads, Service Worker updates, and tab closures.
  */
-const pendingTokens = new Map<string, { access: string; refresh: string | null; expiresAt: string | null }>()
+const PENDING_TOKENS_KEY = 'supfam_pending_tokens'
+
+interface CachedToken {
+  access: string
+  refresh: string | null
+  expiresAt: string | null
+}
+
+function getPendingTokens(): Record<string, CachedToken> {
+  try {
+    const data = localStorage.getItem(PENDING_TOKENS_KEY)
+    return data ? JSON.parse(data) : {}
+  } catch (e) {
+    console.error('Failed to parse pending tokens from localStorage:', e)
+    return {}
+  }
+}
+
+function setPendingToken(userId: string, token: CachedToken) {
+  try {
+    const tokens = getPendingTokens()
+    tokens[userId] = token
+    localStorage.setItem(PENDING_TOKENS_KEY, JSON.stringify(tokens))
+  } catch (e) {
+    console.error('Failed to save pending token to localStorage:', e)
+  }
+}
+
+function getPendingToken(userId: string): CachedToken | null {
+  const tokens = getPendingTokens()
+  return tokens[userId] ?? null
+}
+
+function deletePendingToken(userId: string) {
+  try {
+    const tokens = getPendingTokens()
+    delete tokens[userId]
+    localStorage.setItem(PENDING_TOKENS_KEY, JSON.stringify(tokens))
+  } catch (e) {
+    console.error('Failed to delete pending token from localStorage:', e)
+  }
+}
 
 /**
  * Store Google OAuth tokens in google_tokens on sign-in.
@@ -204,7 +246,7 @@ async function storeCalendarTokens(session: Session) {
   if (!providerToken) return
 
   // Cache the token regardless — we may need it after family setup
-  pendingTokens.set(userId, {
+  setPendingToken(userId, {
     access: providerToken,
     refresh: providerRefreshToken ?? null,
     expiresAt: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
@@ -227,19 +269,25 @@ export async function flushPendingToken(userId: string) {
 
   if (!member) return // still no row — caller should retry later
 
-  const tok = pendingTokens.get(userId)
+  const tok = getPendingToken(userId)
   if (!tok) return
 
+  // ONLY update refresh_token if we actually received a new one from OAuth.
+  // This prevents overwriting a valid refresh_token in the database with NULL.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const payload: any = {
+    family_member_id: member.id,
+    access_token: tok.access,
+    token_expires_at: tok.expiresAt,
+  }
+  if (tok.refresh) {
+    payload.refresh_token = tok.refresh
+  }
+
   await (supabase.from('google_tokens') as any).upsert(
-    {
-      family_member_id: member.id,
-      access_token: tok.access,
-      refresh_token: tok.refresh,
-      token_expires_at: tok.expiresAt,
-    },
+    payload,
     { onConflict: 'family_member_id' }
   )
 
-  pendingTokens.delete(userId)
+  deletePendingToken(userId)
 }
