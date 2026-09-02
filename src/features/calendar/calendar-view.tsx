@@ -436,9 +436,13 @@ export function CalendarView({
       {mode === 'week' ? (
         <div className="flex-1 min-h-0">
           <TimeGridView
-            allDays={allDays}
-            activeDayIdx={topDayIdx}
-            onDayChange={setTopDayIdx}
+            weeks={allWeeks}
+            activeWeekIdx={Math.floor(topDayIdx / 7)}
+            onWeekChange={(wi) => {
+              const targetDay = wi * 7
+              setTopDayIdx(targetDay)
+              topDayIdxRef.current = targetDay
+            }}
             events={events}
             onEventClick={(ev) => setEditEvent(ev)}
             onCellClick={(day) => setFormDate(day)}
