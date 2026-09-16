@@ -395,14 +395,14 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
                         {ownerName}
                       </p>
                       {cals!.map(cal => {
-                        const isSelected = selectedCalendarId === cal.calendar_id
+                        const isSelected = selectedCalendarId === cal.id
                         return (
                           <label
                             key={cal.id}
                             className={`flex items-center gap-3 rounded-xl px-3 py-2.5 cursor-pointer transition-colors ${
                               isSelected ? 'bg-cream-100' : 'hover:bg-cream-50'
                             }`}
-                            onClick={() => { setSelectedCalendarId(cal.calendar_id) }}
+                            onClick={() => { setSelectedCalendarId(cal.id) }}
                           >
                             <div
                               className="h-4 w-4 rounded flex-shrink-0 flex items-center justify-center"
