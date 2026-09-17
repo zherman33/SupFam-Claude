@@ -14,6 +14,7 @@ export interface FamilyMember {
     id: string
     name: string
     invite_code: string | null
+    plan_tier: string
     created_at: string
   }
 }

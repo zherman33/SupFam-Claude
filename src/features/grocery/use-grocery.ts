@@ -9,6 +9,8 @@ export interface GroceryItem {
   category: string | null
   is_checked: boolean
   added_by: string | null
+  source: string
+  meal_plan_id: string | null
   created_at: string
 }
 

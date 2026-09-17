@@ -9,6 +9,7 @@ import { TaskBar } from '@/features/tasks/task-bar'
 import { TaskSidebar } from '@/features/tasks/task-sidebar'
 import { GroceryPanel } from '@/features/grocery/grocery-panel'
 import { NotesPanel } from '@/features/notes/notes-panel'
+import { DinnerBoard } from '@/features/meals/dinner-board'
 import { useTasks, useSyncTasks, type Task } from '@/features/tasks/use-tasks'
 import { TaskForm } from '@/features/tasks/task-form'
 import { useCalendarEvents, useSyncCalendars, useConnectedCalendars } from '@/features/calendar/use-calendar'
@@ -32,6 +33,7 @@ export function Dashboard() {
     return (saved === 'month' || saved === '3week' || saved === 'week') ? saved : '3week'
   })
   const [drawer, setDrawer] = useState<Drawer>(null)
+  const [boardOpen, setBoardOpen] = useState(false)
 
   useEffect(() => {
     localStorage.setItem('family-planner-calendar-mode', mode)
@@ -200,6 +202,21 @@ export function Dashboard() {
                 Notes
               </button>
 
+              {/* Dinner board */}
+              <button
+                onClick={() => { setBoardOpen(true); setMenuOpen(false) }}
+                className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-brown-700 hover:bg-cream-50 transition-colors"
+              >
+                <svg className="h-4 w-4 opacity-50" viewBox="0 0 16 16" fill="none">
+                  <path d="M2 5h12M2 5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2M2 5v6a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  <path d="M6 1v2M10 1v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+                Dinner board
+                <span className="ml-auto rounded-full bg-terracotta-100 px-2 py-0.5 text-[10px] font-bold text-terracotta-600">
+                  Pro
+                </span>
+              </button>
+
               <div className="h-px bg-sand-100 my-1" />
 
               {/* Profile */}
@@ -298,7 +315,6 @@ export function Dashboard() {
 
       {/* ── Main: task sidebar + calendar + optional right drawer ── */}
       <div className={`flex flex-1 min-h-0 gap-3 p-3 ${sidebarExpanded ? 'pb-safe' : 'pb-0'}`}>
-
         {/* Task sidebar — shown only when expanded */}
         {sidebarExpanded && (
           <div className="w-72 flex-shrink-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-sand-200/60">
@@ -372,6 +388,8 @@ export function Dashboard() {
       {editingTask && (
         <TaskForm task={editingTask} onClose={() => setEditingTask(null)} />
       )}
+
+      {boardOpen && <DinnerBoard onClose={() => setBoardOpen(false)} />}
     </div>
   )
 }

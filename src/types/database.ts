@@ -6,18 +6,21 @@ export interface Database {
           id: string
           name: string
           invite_code: string | null
+          plan_tier: string
           created_at: string
         }
         Insert: {
           id?: string
           name: string
           invite_code?: string | null
+          plan_tier?: string
           created_at?: string
         }
         Update: {
           id?: string
           name?: string
           invite_code?: string | null
+          plan_tier?: string
           created_at?: string
         }
         Relationships: []
@@ -245,6 +248,8 @@ export interface Database {
           category: string | null
           is_checked: boolean
           added_by: string | null
+          source: string
+          meal_plan_id: string | null
           created_at: string
         }
         Insert: {
@@ -254,6 +259,8 @@ export interface Database {
           category?: string | null
           is_checked?: boolean
           added_by?: string | null
+          source?: string
+          meal_plan_id?: string | null
           created_at?: string
         }
         Update: {
@@ -263,6 +270,8 @@ export interface Database {
           category?: string | null
           is_checked?: boolean
           added_by?: string | null
+          source?: string
+          meal_plan_id?: string | null
           created_at?: string
         }
         Relationships: [
@@ -271,6 +280,127 @@ export interface Database {
             columns: ['family_id']
             isOneToOne: false
             referencedRelation: 'families'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'grocery_items_meal_plan_id_fkey'
+            columns: ['meal_plan_id']
+            isOneToOne: false
+            referencedRelation: 'meal_plans'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      meal_plans: {
+        Row: {
+          id: string
+          family_id: string
+          week_start: string
+          created_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          family_id: string
+          week_start: string
+          created_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          family_id?: string
+          week_start?: string
+          created_by?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'meal_plans_family_id_fkey'
+            columns: ['family_id']
+            isOneToOne: false
+            referencedRelation: 'families'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      meals: {
+        Row: {
+          id: string
+          meal_plan_id: string
+          day_index: number
+          slot: string
+          title: string
+          notes: string | null
+          recipe_url: string | null
+          servings: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          meal_plan_id: string
+          day_index: number
+          slot?: string
+          title: string
+          notes?: string | null
+          recipe_url?: string | null
+          servings?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          meal_plan_id?: string
+          day_index?: number
+          slot?: string
+          title?: string
+          notes?: string | null
+          recipe_url?: string | null
+          servings?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'meals_meal_plan_id_fkey'
+            columns: ['meal_plan_id']
+            isOneToOne: false
+            referencedRelation: 'meal_plans'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      meal_ingredients: {
+        Row: {
+          id: string
+          meal_id: string
+          name: string
+          quantity: number | null
+          unit: string | null
+          category: string | null
+          position: number
+        }
+        Insert: {
+          id?: string
+          meal_id: string
+          name: string
+          quantity?: number | null
+          unit?: string | null
+          category?: string | null
+          position?: number
+        }
+        Update: {
+          id?: string
+          meal_id?: string
+          name?: string
+          quantity?: number | null
+          unit?: string | null
+          category?: string | null
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'meal_ingredients_meal_id_fkey'
+            columns: ['meal_id']
+            isOneToOne: false
+            referencedRelation: 'meals'
             referencedColumns: ['id']
           },
         ]
