@@ -112,8 +112,11 @@ export function CalendarView({
 
   // ── Scroll state ────────────────────────────────────────────────────────
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [topDayIdx, setTopDayIdx] = useState(WEEKS_BEFORE * 7)
-  const topDayIdxRef = useRef(WEEKS_BEFORE * 7)
+  // In 3-week mode the current week is centered on screen: the "home" scroll
+  // position shows the week before, the current week, and the week after.
+  const homeTopWeek = mode === '3week' ? WEEKS_BEFORE - 1 : WEEKS_BEFORE
+  const [topDayIdx, setTopDayIdx] = useState(homeTopWeek * 7)
+  const topDayIdxRef = useRef(homeTopWeek * 7)
   const [isTouchDevice, setIsTouchDevice] = useState(false)
 
   // Keep track of the synced date ranges to avoid redundant API/DB calls
@@ -212,14 +215,15 @@ export function CalendarView({
   }
 
   const handleJumpToToday = () => {
-    const target = WEEKS_BEFORE * 7
+    const targetWeek = mode === '3week' ? WEEKS_BEFORE - 1 : WEEKS_BEFORE
+    const target = targetWeek * 7
     if (mode === 'week') {
       setTopDayIdx(target)
       topDayIdxRef.current = target
     } else {
       if (scrollRef.current) {
         const rowH = scrollRef.current.scrollHeight / TOTAL_WEEKS
-        scrollRef.current.scrollTo({ top: WEEKS_BEFORE * rowH, behavior: 'smooth' })
+        scrollRef.current.scrollTo({ top: targetWeek * rowH, behavior: 'smooth' })
       }
       setTopDayIdx(target)
       topDayIdxRef.current = target
@@ -343,7 +347,7 @@ export function CalendarView({
               <path d="M6 4L10 8L6 12" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
-          {topDayIdx !== WEEKS_BEFORE * 7 && (
+          {topDayIdx !== homeTopWeek * 7 && (
             <button
               onClick={handleJumpToToday}
               className="rounded-md bg-sand-100 hover:bg-sand-200 px-2 py-0.5 text-[11px] font-semibold text-brown-700 active:opacity-75 transition-colors flex-shrink-0"
@@ -596,7 +600,6 @@ export function CalendarView({
 
                         const lastOccupiedSlot = dayBannerSlots.map(ev => ev !== null).lastIndexOf(true)
                         const renderedBannerSlots = dayBannerSlots.slice(0, lastOccupiedSlot + 1)
-                        const hasOtherContent = renderedBannerSlots.some(ev => ev !== null) || personalPills.length > 0
 
                         return (
                           <div
@@ -672,7 +675,6 @@ export function CalendarView({
                                 )}
                                 {ambientPills.length > 0 && (
                                   <>
-                                    {hasOtherContent && <div className="flex-1 min-h-0" />}
                                     {ambientPills.map((pill) => (
                                       <EventPill
                                         key={`${pill.ev.id}-${key}`}
