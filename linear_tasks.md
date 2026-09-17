@@ -1,54 +1,7 @@
 # Active Linear Tasks — Sup Fam
 
-*Last synced: 9/16/2026, 3:45:20 PM*
-*Audited against the live codebase on 2026-09-16. Items verified as shipped were moved to Done and are excluded from this list.*
-
-### [Z33-18] 3-week calendar view doesn't center on current week
-- **Status**: `In Progress`
-- **Assignee**: Unassigned [High]
-- **Description**:
-  ```
-## On load, the 3-week calendar view does not scroll or snap to the current week.
-
-### 🔎 Audit (2026-09-16) — still open, confirmed
-
-Re-audited against main: the 3-week view scrolls the current week to the TOP row, not centered — `topDayIdx` initializes at `WEEKS_BEFORE*7` and mount sets `scrollTop = scrollWeek * rowH` (`calendar-view.tsx`), so visible weeks are \[current, current+1, current+2\]. No centering offset exists; recent commits only touched the 1-week view.
-  ```
-
-### [Z33-40] Birthday/holiday placement: move to bottom of day column, not bottom of tile
-- **Status**: `In Progress`
-- **Assignee**: Unassigned [High]
-- **Description**:
-  ```
-## Problem
-
-Birthdays and holidays pinned to the bottom of individual day tiles looks disorganized, especially when multiple birthdays/holidays stack. The tile-level grouping creates visual clutter.
-
-## Proposed change
-
-Move birthdays and holidays to the bottom of the full day *column* (below all personal events across the visible range), rather than the bottom of each individual tile.
-
-This keeps them de-emphasized without fragmenting them across tiles.
-
-## Open question
-
-This may need a design test — the exact behavior in 3-week view (where columns are narrow) versus month view needs validation. Consider:
-
-* 3-week view: birthdays/holidays in a subtle row at the very bottom of the column
-* Month view: test without sidebar first to assess space
-
-## Acceptance criteria
-
-* Birthdays and holidays are no longer at the bottom of individual day tiles
-* They appear at the bottom of the day column, below all personal events
-* Visual result looks more organized than current tile-bottom placement
-
----
-
-### 🔎 Audit (2026-09-16) — still open, narrowed scope
-
-Re-audited against main: month/3-week views already pin birthday/holiday pills to the bottom of the day cell (flex-1 spacer in `calendar-view.tsx`), but the 1-week `TimeGridView` still renders `BirthdayGroupPill` at the TOP of the day column (`time-grid-view.tsx:150-156`). Only the 1-week placement is still outstanding.
-  ```
+*Last synced: 9/17/2026, 1:21:56 PM*
+*Linear is the single source of truth for Sup Fam task tracking (Notion plan retired 2026-09-17).*
 
 ### [Z33-41] Family chat workflow - iMessage style with assistant capability
 - **Status**: `Backlog`
@@ -423,4 +376,4 @@ Implement calendar integration for Outlook and Exchange users through Microsoft 
 When two family members are using the product at the same time, changes should reflect without a manual refresh. Options include PostgreSQL LISTEN/NOTIFY or a polling strategy, and the added complexity should be validated early.
   ```
 
-*Done this audit (verified shipped): Z33-16, Z33-33, Z33-32, Z33-36.*
+*Recently closed: Z33-16, Z33-33, Z33-32, Z33-36 (audit 2026-09-16), Z33-18 (fixed 2026-09-17), Z33-40 (canceled 2026-09-17).*
