@@ -13,7 +13,7 @@ import {
   parse,
 } from 'date-fns'
 import { useFamilyMember, useFamilyMembers } from '@/features/auth/use-family-member'
-import { useConnectedCalendars, type CalendarEvent } from './use-calendar'
+import { useConnectedCalendars, type CalendarEvent, isReadOnlyCalendar } from './use-calendar'
 import {
   useCreateEvent,
   useUpdateEvent,
@@ -207,6 +207,7 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim() || !selectedCalendarId || !selectedMemberId) return
+    if (isEdit && sourceIsReadOnly) return
     setError(null)
 
     const selectedCal = calendars?.find(c => c.id === selectedCalendarId)
@@ -250,6 +251,25 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
     calsByMember.get(ownerName)!.push(cal)
   }
 
+  // Count calendar names so duplicates (e.g. two "MJI"s) get a disambiguating subtitle
+  const nameCounts = new Map<string, number>()
+  for (const cals of calsByMember.values()) {
+    for (const cal of cals ?? []) {
+      const key = (cal.calendar_name ?? cal.calendar_id).toLowerCase()
+      nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1)
+    }
+  }
+
+  // The calendar the event currently lives on (edit mode). ICS subscriptions are
+  // read-only — the event can't be saved back or deleted through Google.
+  const sourceCal = isEdit && event
+    ? calendars?.find(c =>
+        c.calendar_id === event.source_calendar_id &&
+        c.family_member_id === event.created_by
+      )
+    : undefined
+  const sourceIsReadOnly = !!sourceCal && isReadOnlyCalendar(sourceCal)
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       {/* Backdrop */}
@@ -263,7 +283,7 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
             {isEdit ? 'Edit event' : 'New event'}
           </h2>
           <div className="flex items-center gap-2">
-            {isEdit && (
+            {isEdit && !sourceIsReadOnly && (
               <button
                 onClick={handleDelete}
                 disabled={isPending}
@@ -298,6 +318,13 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
                 placeholder="Event title"
                 className="w-full text-lg font-semibold text-brown-800 placeholder:text-brown-700/30 focus:outline-none border-b border-sand-200 pb-2"
               />
+
+              {/* Read-only notice for events synced from ICS subscriptions */}
+              {isEdit && sourceIsReadOnly && (
+                <div className="rounded-xl border border-sand-200 bg-cream-50 px-3 py-2 text-xs text-brown-700">
+                  This event comes from a read-only calendar subscription, so it can't be edited or deleted from here.
+                </div>
+              )}
 
               {/* All-day toggle */}
               <div className="flex items-center gap-3">
@@ -396,29 +423,44 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
                       </p>
                       {cals!.map(cal => {
                         const isSelected = selectedCalendarId === cal.id
+                        const readOnly = isReadOnlyCalendar(cal)
+                        const ambiguous = (nameCounts.get((cal.calendar_name ?? cal.calendar_id).toLowerCase()) ?? 0) > 1
                         return (
                           <label
                             key={cal.id}
-                            className={`flex items-center gap-3 rounded-xl px-3 py-2.5 cursor-pointer transition-colors ${
-                              isSelected ? 'bg-cream-100' : 'hover:bg-cream-50'
+                            title={readOnly ? 'Read-only subscription — events can’t be saved here' : undefined}
+                            className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors ${
+                              readOnly
+                                ? 'opacity-55 cursor-not-allowed'
+                                : `cursor-pointer ${isSelected ? 'bg-cream-100' : 'hover:bg-cream-50'}`
                             }`}
-                            onClick={() => { setSelectedCalendarId(cal.id) }}
+                            onClick={() => { if (!readOnly) setSelectedCalendarId(cal.id) }}
                           >
                             <div
                               className="h-4 w-4 rounded flex-shrink-0 flex items-center justify-center"
                               style={{ backgroundColor: cal.color ?? '#5B7FB5' }}
                             >
-                              {isSelected && (
+                              {isSelected && !readOnly && (
                                 <svg className="h-2.5 w-2.5 text-white" viewBox="0 0 10 10" fill="none">
                                   <path d="M2 5l2.5 2.5 3.5-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                                 </svg>
                               )}
                             </div>
-                            <span className="text-sm text-brown-800 flex-1">{cal.calendar_name}</span>
-                            {cal.is_default && (
+                            <span className="text-sm text-brown-800 flex-1 min-w-0">
+                              <span className="block truncate">{cal.calendar_name}</span>
+                              {ambiguous && (
+                                <span className="block truncate text-[11px] text-brown-700/40">
+                                  {readOnly ? 'Read-only subscription' : cal.calendar_id}
+                                </span>
+                              )}
+                            </span>
+                            {readOnly && (
+                              <span className="text-[11px] text-brown-700/40 bg-sand-100 rounded px-1.5 py-0.5 flex-shrink-0">read-only</span>
+                            )}
+                            {!readOnly && cal.is_default && (
                               <span className="text-[11px] text-brown-700/40 bg-sand-100 rounded px-1.5 py-0.5">default</span>
                             )}
-                            {!cal.is_default && isSelected && (
+                            {!readOnly && !cal.is_default && isSelected && (
                               <button
                                 type="button"
                                 onClick={e => { e.stopPropagation(); setDefault.mutate({ calendarId: cal.calendar_id }) }}
@@ -489,7 +531,7 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
           <div className="px-5 pb-6 pt-2 flex-shrink-0 border-t border-sand-100 bg-white">
             <button
               type="submit"
-              disabled={!title.trim() || !selectedCalendarId || isPending}
+              disabled={!title.trim() || !selectedCalendarId || isPending || (isEdit && sourceIsReadOnly)}
               className="w-full rounded-2xl bg-brown-800 py-4 text-base font-semibold text-cream-50 disabled:opacity-40 hover:bg-brown-900 transition-colors"
             >
               {isPending ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save changes' : 'Create event')}

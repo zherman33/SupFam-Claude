@@ -36,6 +36,15 @@ export interface ConnectedCalendar {
   owner?: { display_name: string; avatar_color: string | null }
 }
 
+/**
+ * ICS / iCal subscriptions are synced one-way into the app — events on them
+ * can't be created, edited, or deleted via the Google API, so they must not
+ * be offered as save targets in the event form.
+ */
+export function isReadOnlyCalendar(cal: Pick<ConnectedCalendar, 'ics_url' | 'calendar_id'>): boolean {
+  return !!cal.ics_url || cal.calendar_id.startsWith('ics_')
+}
+
 export interface EventDateBounds {
   firstDay: string
   lastDay: string
