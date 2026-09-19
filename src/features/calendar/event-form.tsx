@@ -320,12 +320,12 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-brown-900/50 backdrop-blur-sm" onClick={onClose}/>
+      <div className="absolute inset-0 bg-brown-900/70 backdrop-blur-sm" onClick={onClose}/>
 
       {/* Sheet */}
       <div className="relative z-10 w-full max-w-xl short-modal-container bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-sand-100 flex-shrink-0">
+        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-sand-100 flex-shrink-0">
           <h2 className="font-semibold text-brown-800 text-base">
             {isEdit ? 'Edit event' : 'New event'}
           </h2>
@@ -352,7 +352,7 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
-          <div className="px-5 py-5 space-y-5">
+          <div className="px-5 py-4 space-y-4">
             {/* Title */}
             <input
               autoFocus={!isEdit}
@@ -360,7 +360,7 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 placeholder="Event title"
-                className="w-full text-xl font-semibold text-brown-800 placeholder:text-brown-700/30 focus:outline-none border-b border-sand-200 pb-2"
+                className="w-full text-lg font-semibold text-brown-800 placeholder:text-brown-700/30 focus:outline-none border-b border-sand-200 pb-2"
               />
 
               {/* Read-only notice for events synced from ICS subscriptions */}
@@ -379,13 +379,13 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
                   value={location}
                   onChange={e => setLocation(e.target.value)}
                   placeholder="Add location"
-                  className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3.5 py-2.5 text-sm text-brown-800 placeholder:text-brown-700/30 focus:border-terracotta-500 focus:outline-none"
+                  className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3.5 py-2 text-sm text-brown-800 placeholder:text-brown-700/30 focus:border-terracotta-500 focus:outline-none"
                 />
               </div>
 
               {/* Details card */}
               <div className="rounded-2xl border border-sand-200 bg-white divide-y divide-sand-100">
-                <div className="flex items-center justify-between px-4 py-3">
+                <div className="flex items-center justify-between px-4 py-2.5">
                   <span className="text-sm font-medium text-brown-800">All day</span>
                   <button
                     type="button"
@@ -396,7 +396,7 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
                   </button>
                 </div>
 
-                <div className="flex items-center gap-3 px-4 py-2.5">
+                <div className="flex items-center gap-3 px-4 py-2">
                   <span className="w-14 flex-shrink-0 text-sm font-medium text-brown-800">Starts</span>
                   <CustomDatePicker
                     value={startDate}
@@ -415,7 +415,7 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
                   )}
                 </div>
 
-                <div className="flex items-center gap-3 px-4 py-2.5">
+                <div className="flex items-center gap-3 px-4 py-2">
                   <span className="w-14 flex-shrink-0 text-sm font-medium text-brown-800">Ends</span>
                   <CustomDatePicker
                     value={endDate}
@@ -449,7 +449,7 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
                     <button
                       type="button"
                       onClick={() => setCalPickerOpen(v => !v)}
-                      className="w-full flex items-center gap-3 rounded-xl border border-sand-200 bg-cream-50 px-3 py-2.5 hover:bg-cream-100 transition-colors focus:border-terracotta-500 focus:outline-none"
+                      className="w-full flex items-center gap-3 rounded-xl border border-sand-200 bg-cream-50 px-3 py-2 hover:bg-cream-100 transition-colors focus:border-terracotta-500 focus:outline-none"
                     >
                       <div
                         className="h-4 w-4 rounded flex-shrink-0"
@@ -579,8 +579,8 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
                   value={description}
                   onChange={e => setDescription(e.target.value)}
                   placeholder="Add notes"
-                  rows={3}
-                  className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3.5 py-2.5 text-sm text-brown-800 placeholder:text-brown-700/30 focus:border-terracotta-500 focus:outline-none resize-none"
+                  rows={2}
+                  className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3.5 py-2 text-sm text-brown-800 placeholder:text-brown-700/30 focus:border-terracotta-500 focus:outline-none resize-none"
                 />
               </div>
           </div>
@@ -597,7 +597,7 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
             <button
               type="submit"
               disabled={!title.trim() || !selectedCalendarId || isPending || (isEdit && sourceIsReadOnly)}
-              className="w-full rounded-2xl bg-brown-800 py-4 text-base font-semibold text-cream-50 disabled:opacity-40 hover:bg-brown-900 transition-colors"
+              className="w-full rounded-2xl bg-brown-800 py-3 text-base font-semibold text-cream-50 disabled:opacity-40 hover:bg-brown-900 transition-colors"
             >
               {isPending ? (isEdit ? (isMoving ? 'Moving…' : 'Saving…') : 'Creating…') : (isEdit ? (isMoving ? 'Move event' : 'Save changes') : 'Create event')}
             </button>
