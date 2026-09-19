@@ -13,6 +13,7 @@ import {
   useToggleCalendarVisibility,
   getEventDateBounds,
   type CalendarEvent,
+  type ConnectedCalendar,
   type EventDateBounds,
 } from './use-calendar'
 import { useEventColorRules, applyColorRules } from '@/features/settings/use-event-color-rules'
@@ -327,7 +328,7 @@ export function CalendarView({
 
       {/* ── Header ── */}
       <div className="relative flex-shrink-0 flex items-center h-9 mb-2 z-50">
-        {/* Left controls — Nav arrows + Today + Quick Toggle calendars */}
+        {/* Left controls — navigation only */}
         <div className="flex items-center gap-1.5 relative z-10 mr-auto max-w-[48%] overflow-x-auto no-scrollbar py-0.5">
           <button
             onClick={() => handleNavigate(-1)}
@@ -355,40 +356,6 @@ export function CalendarView({
               Today
             </button>
           )}
-          {quickToggleCalendars.length > 0 && quickToggleCalendars.map(cal => {
-            const color = cal.color ?? '#C4714F'
-            const isVisible = cal.is_visible
-            return (
-              <button
-                key={cal.id}
-                type="button"
-                onClick={() => toggleVisibility.mutate({ id: cal.id, is_visible: !isVisible })}
-                title={`${cal.calendar_name ?? cal.calendar_id} (${isVisible ? 'Currently visible — click to hide' : 'Currently hidden — click to show'})`}
-                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex-shrink-0 ${
-                  isVisible
-                    ? 'shadow-sm active:scale-95'
-                    : 'bg-white border border-sand-200 text-brown-700/50 hover:bg-cream-50 hover:text-brown-700 active:scale-95'
-                }`}
-                style={
-                  isVisible
-                    ? {
-                        backgroundColor: `${color}18`,
-                        border: `1px solid ${color}40`,
-                        color: darkenForReadability(color),
-                      }
-                    : undefined
-                }
-              >
-                <span
-                  className={`h-2 w-2 rounded-full flex-shrink-0 transition-opacity ${isVisible ? 'opacity-100' : 'opacity-40'}`}
-                  style={{ backgroundColor: color }}
-                />
-                <span className="truncate max-w-[120px]">
-                  {cal.calendar_name ?? cal.calendar_id}
-                </span>
-              </button>
-            )
-          })}
         </div>
 
         {/* Month label — absolutely centered; tapping triggers a sync refresh */}
@@ -414,10 +381,10 @@ export function CalendarView({
           </button>
         </div>
 
-        {/* Right controls — view switcher + ⋯ */}
-        <div className="ml-auto flex items-center gap-1.5 relative z-10">
+        {/* Right controls — view switcher + calendar filters + ⋯ */}
+        <div className="ml-auto flex items-center gap-1.5 relative z-10 max-w-[48%] overflow-x-auto no-scrollbar py-0.5">
           {onModeChange && (
-            <div className="flex items-center gap-px rounded-lg bg-sand-100 p-0.5">
+            <div className="flex items-center gap-px rounded-lg bg-sand-100 p-0.5 flex-shrink-0">
               {(['week', '3week', 'month'] as CalendarMode[]).map(m => (
                 <button
                   key={m}
@@ -433,6 +400,16 @@ export function CalendarView({
               ))}
             </div>
           )}
+          {quickToggleCalendars.length > 0 && (
+            <span className="w-px h-5 bg-sand-200 flex-shrink-0" aria-hidden="true" />
+          )}
+          {quickToggleCalendars.map(cal => (
+            <QuickTogglePill
+              key={cal.id}
+              cal={cal}
+              onToggle={(id, is_visible) => toggleVisibility.mutate({ id, is_visible })}
+            />
+          ))}
           {headerRight}
         </div>
       </div>
@@ -464,7 +441,7 @@ export function CalendarView({
                 } ${
                   i === todayDow
                     ? 'text-terracotta-500'
-                    : i === 0 || i === 6 ? 'text-brown-700/25' : 'text-brown-700/45'
+                    : i === 0 || i === 6 ? 'text-brown-700/35' : 'text-brown-700/60'
                 }`}
               >
                 {d}
@@ -610,14 +587,10 @@ export function CalendarView({
                             `}
                             onClick={() => setFormDate(day)}
                           >
-                            {isCurrentDay && (
-                              <div className="absolute top-0 inset-x-0 h-[3px] bg-terracotta-500" />
-                            )}
                             <div className={`flex flex-col h-full ${mode === 'month' ? 'p-1.5 gap-px' : 'p-2 gap-1'}`}>
                               <div className="flex-shrink-0 mb-0.5">
                                 {isCurrentDay ? (
-                                  // Outline ring — subtle, lighter feel
-                                  <span className={`inline-flex items-center justify-center rounded-full border border-terracotta-400 text-terracotta-500 font-semibold leading-none ${
+                                  <span className={`inline-flex items-center justify-center rounded-full bg-terracotta-500 text-white font-bold leading-none ${
                                     mode === 'month' ? 'h-[1.375rem] w-[1.375rem] text-[0.6875rem]' : 'h-[1.625rem] w-[1.625rem] text-[0.8125rem]'
                                   }`}>
                                     {format(day, 'd')}
@@ -707,6 +680,47 @@ export function CalendarView({
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
+// Quick-toggle calendar filter pill (lives in the header's filter cluster)
+function QuickTogglePill({
+  cal,
+  onToggle,
+}: {
+  cal: ConnectedCalendar
+  onToggle: (id: string, is_visible: boolean) => void
+}) {
+  const color = cal.color ?? '#C4714F'
+  const isVisible = cal.is_visible
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(cal.id, !isVisible)}
+      title={`${cal.calendar_name ?? cal.calendar_id} (${isVisible ? 'Currently visible — click to hide' : 'Currently hidden — click to show'})`}
+      className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex-shrink-0 ${
+        isVisible
+          ? 'shadow-sm active:scale-95'
+          : 'bg-white border border-sand-200 text-brown-700/50 hover:bg-cream-50 hover:text-brown-700 active:scale-95'
+      }`}
+      style={
+        isVisible
+          ? {
+              backgroundColor: `${color}18`,
+              border: `1px solid ${color}40`,
+              color: darkenForReadability(color),
+            }
+          : undefined
+      }
+    >
+      <span
+        className={`h-2 w-2 rounded-full flex-shrink-0 transition-opacity ${isVisible ? 'opacity-100' : 'opacity-40'}`}
+        style={{ backgroundColor: color }}
+      />
+      <span className="truncate max-w-[120px]">
+        {cal.calendar_name ?? cal.calendar_id}
+      </span>
+    </button>
+  )
+}
+
 // Birthday (#contacts) and holiday (#holiday) calendars are "ambient" —
 // they render compact and are pinned to the bottom of the day cell.
 function isAmbientCalendarEvent(ev: CalendarEvent): boolean {
@@ -730,11 +744,25 @@ function darkenForReadability(hex: string): string {
 }
 
 function formatTimeShort(dateStr: string): string {
-  return format(parseISO(dateStr), 'h:mma')
-    .replace(':00', '')
-    .toLowerCase()
-    .replace('am', 'a')
-    .replace('pm', 'p')
+  return format(parseISO(dateStr), 'h:mm a').replace(':00', '')
+}
+
+// Only "repair" titles that came in all-lowercase (e.g. "kayla poole birthday"
+// -> "Kayla Poole Birthday"). Anything with intentional casing ("NY",
+// "Gigi Swim") is left untouched.
+const TITLECASE_KEEP_LOWER = new Set([
+  'a', 'an', 'and', 'as', 'at', 'but', 'for', 'in', 'nor', 'of', 'on', 'or', 'so', 'the', 'to', 'up', 'yet',
+])
+function smartTitleCase(s: string): string {
+  if (!s || s !== s.toLowerCase()) return s
+  return s
+    .split(/(\s+)/)
+    .map((word, i) => {
+      const w = word.toLowerCase()
+      if (i !== 0 && TITLECASE_KEEP_LOWER.has(w)) return w
+      return w.charAt(0).toUpperCase() + w.slice(1)
+    })
+    .join('')
 }
 
 function EventPill({
@@ -763,11 +791,9 @@ function EventPill({
   const color = ruleColor ?? calColor ?? ev.color ?? '#5B7FB5'
   const textColor = darkenForReadability(color)
 
-  const label = (!ev.all_day && !isBanner)
-    ? `${formatTimeShort(ev.start_at)} ${ev.title}`
-    : (!ev.all_day && isStart)
-    ? `${formatTimeShort(ev.start_at)} ${ev.title}`
-    : ev.title
+  const timeStr = !ev.all_day ? formatTimeShort(ev.start_at) : null
+  const showTime = !!timeStr && (!isBanner || isStart)
+  const displayTitle = smartTitleCase(ev.title)
 
   const barWidth = mode === 'month' ? 'w-[0.1875rem]' : mode === '3week' ? 'w-1' : 'w-1.5'
   const padding = mode === 'month' ? 'px-1 py-px' : mode === '3week' ? 'px-1.5 py-1' : 'px-2 py-1.5'
@@ -798,7 +824,7 @@ function EventPill({
     <div
       className={`flex items-stretch overflow-hidden flex-shrink-0 cursor-pointer hover:brightness-95 active:brightness-90 transition-[filter] ${roundedClass}`}
       style={{
-        backgroundColor: `${color}18`,
+        backgroundColor: isBanner ? `${color}2b` : `${color}18`,
         marginLeft: negMarginLeft,
         marginRight: negMarginRight,
       }}
@@ -813,7 +839,14 @@ function EventPill({
         style={compPaddingLeft ? { paddingLeft: compPaddingLeft } : undefined}
       >
         <span className={`truncate ${textSize}`} style={{ color: textColor }}>
-          {showTitle ? label : '\u00A0'}
+          {showTitle ? (
+            <>
+              {showTime && <span className="font-bold">{timeStr} </span>}
+              {displayTitle}
+            </>
+          ) : (
+            '\u00A0'
+          )}
         </span>
       </div>
     </div>
