@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/features/auth/auth-context'
 import { useFamilyMember } from '@/features/auth/use-family-member'
@@ -55,14 +55,27 @@ function SupportDialog({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState('')
   const [sent, setSent] = useState(false)
 
-  const submit = async (e: React.FormEvent) => {
+  // Member data can arrive after the dialog mounts — sync the prefill then.
+  useEffect(() => {
+    const prefill = member?.display_name ?? user?.user_metadata?.full_name ?? ''
+    if (prefill && !name) setName(prefill)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [member?.display_name])
+
+  const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (sending) return
     setSending(true)
     setError('')
     try {
+      // Read from the form itself: browser autofill can fill inputs without
+      // firing React onChange, leaving state empty while text is visible.
+      const fd = new FormData(e.currentTarget)
+      const finalName = ((fd.get('name') as string) || name).trim()
+      const finalEmail = ((fd.get('email') as string) || email).trim()
+      const finalMessage = ((fd.get('message') as string) || message).trim()
       const { data, error: fnError } = await supabase.functions.invoke('support-chat', {
-        body: { name: name.trim(), email: email.trim(), message: message.trim() },
+        body: { name: finalName, email: finalEmail, message: finalMessage },
       })
       if (fnError) throw new Error("Hmm, that didn't go through — try again?")
       if (data?.error) throw new Error(data.error)
@@ -120,6 +133,7 @@ function SupportDialog({ onClose }: { onClose: () => void }) {
               <label className="block text-sm font-semibold text-brown-700">Your name</label>
               <input
                 type="text"
+                name="name"
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="Alex"
@@ -130,6 +144,7 @@ function SupportDialog({ onClose }: { onClose: () => void }) {
               <label className="block text-sm font-semibold text-brown-700">Email</label>
               <input
                 type="email"
+                name="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder="you@example.com"
@@ -139,6 +154,7 @@ function SupportDialog({ onClose }: { onClose: () => void }) {
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-brown-700">What's up?</label>
               <textarea
+                name="message"
                 value={message}
                 onChange={e => setMessage(e.target.value)}
                 placeholder="Tell us what's going on…"

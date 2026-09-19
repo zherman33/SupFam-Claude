@@ -208,21 +208,18 @@ function FamilyStep({ mode, onDone }: { mode: 'create' | 'join'; onDone: () => v
     setLoading(true)
     setError('')
     try {
-      const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase()
-      const { data: family, error: familyError } = await supabase
-        .from('families')
-        .insert({ name: familyName.trim(), invite_code: inviteCode })
-        .select()
-        .single()
-      if (familyError || !family) throw new Error('create-family')
-      const { error: memberError } = await supabase.from('family_members').insert({
-        family_id: family.id,
-        user_id: user.id,
-        display_name: displayName.trim(),
-        role: 'admin',
-        avatar_color: '#5B8C5A',
+      // Atomic server-side creation: the families SELECT policy requires an
+      // existing membership, so a raw INSERT + select-back fails RLS for new users.
+      const { data, error: rpcError } = await supabase.rpc('create_family', {
+        p_name: familyName.trim(),
+        p_display_name: displayName.trim(),
       })
-      if (memberError) throw new Error('create-member')
+      if (rpcError) throw rpcError
+      const res = data as { ok: boolean; error?: string } | null
+      if (!res?.ok) {
+        setError(res?.error ?? "Hmm, that didn't work — try again?")
+        return
+      }
       await flushPendingToken(user.id)
       onDone()
     } catch {
