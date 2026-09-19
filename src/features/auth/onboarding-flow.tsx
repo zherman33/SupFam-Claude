@@ -34,7 +34,7 @@ export function useOnboardingStep(): OnboardingStep | null {
   const { user } = useAuth()
   const { data: member, isFetching: memberFetching } = useFamilyMember()
 
-  const { data: calCount } = useQuery({
+  const { data: calCount, isLoading: calCountLoading } = useQuery({
     queryKey: ['onboarding-cal-count', member?.id],
     enabled: !!member?.id,
     queryFn: async () => {
@@ -45,7 +45,7 @@ export function useOnboardingStep(): OnboardingStep | null {
       return count ?? 0
     },
   })
-  const { data: members } = useFamilyMembers()
+  const { data: members, isLoading: membersLoading } = useFamilyMembers()
 
   const [checkoutSuccess, setCheckoutSuccess] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -73,6 +73,12 @@ export function useOnboardingStep(): OnboardingStep | null {
   // (The checks below can never pass for someone who skipped calendars
   // or hasn't invited anyone yet, which used to trap users in onboarding.)
   if (member.onboarding_completed) return 'done'
+
+  // While the calendar/member counts are still loading, stay unresolved —
+  // treating "not yet loaded" as zero flashes the Calendars/Invite steps on
+  // every cold start for fully-set-up families. App.tsx shows the splash
+  // while this returns null.
+  if (calCountLoading || membersLoading) return null
 
   const status = member.families?.subscription_status ?? 'incomplete'
   const subscribed = status === 'trialing' || status === 'active' || checkoutSuccess

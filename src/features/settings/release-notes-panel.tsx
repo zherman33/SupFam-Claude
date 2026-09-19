@@ -19,7 +19,7 @@ export function ReleaseNotesPanel({ onClose }: { onClose: () => void }) {
               What&apos;s new
             </h2>
             <p className="text-xs text-brown-700/50">
-              Every Sup Fam update, from the beginning
+              Every Sup Fam update, newest first
             </p>
           </div>
           <button
@@ -33,7 +33,7 @@ export function ReleaseNotesPanel({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {/* Notes — oldest first */}
+        {/* Notes — newest first */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
           <div className="flex flex-col gap-6">
             {RELEASE_NOTES.map((release) => (

@@ -384,18 +384,18 @@ export function CalendarView({
         {/* Right controls — view switcher + calendar filters + ⋯ */}
         <div className="ml-auto flex items-center gap-1.5 relative z-10 max-w-[48%] overflow-x-auto no-scrollbar py-0.5">
           {onModeChange && (
-            <div className="flex items-center gap-px rounded-lg bg-sand-100 p-0.5 flex-shrink-0">
+            <div className="flex items-center gap-0.5 rounded-xl bg-sand-100 p-1 flex-shrink-0">
               {(['week', '3week', 'month'] as CalendarMode[]).map(m => (
                 <button
                   key={m}
                   onClick={() => onModeChange(m)}
-                  className={`rounded-md px-2.5 py-1 text-[0.6875rem] font-semibold transition-colors ${
+                  className={`rounded-lg px-4 min-h-[44px] text-[13px] font-semibold transition-colors ${
                     mode === m
                       ? 'bg-white text-brown-800 shadow-sm'
-                      : 'text-brown-700/50 hover:text-brown-800'
+                      : 'text-brown-700/50 hover:text-brown-800 active:text-brown-800'
                   }`}
                 >
-                  {m === '3week' ? '3 wk' : m === 'week' ? '1 wk' : 'Mo'}
+                  {m === '3week' ? '3 Weeks' : m === 'week' ? 'Week' : 'Month'}
                 </button>
               ))}
             </div>
@@ -583,15 +583,15 @@ export function CalendarView({
                             key={key}
                             className={`relative flex flex-col border-r border-sand-100 last:border-r-0 overflow-hidden min-h-0 cursor-pointer
                               ${isWeekend && !isCurrentDay ? 'bg-[#faf8f5]' : 'bg-white'}
-                              ${isCurrentDay ? 'bg-terracotta-500/[0.09]' : ''}
+                              ${isCurrentDay ? 'bg-terracotta-500/[0.09] ring-1 ring-inset ring-terracotta-500/40' : ''}
                             `}
                             onClick={() => setFormDate(day)}
                           >
                             <div className={`flex flex-col h-full ${mode === 'month' ? 'p-1.5 gap-px' : 'p-2 gap-1'}`}>
-                              <div className="flex-shrink-0 mb-0.5">
+                              <div className="flex-shrink-0 mb-0.5 flex items-center gap-1.5">
                                 {isCurrentDay ? (
-                                  <span className={`inline-flex items-center justify-center rounded-full bg-terracotta-500 text-white font-bold leading-none ${
-                                    mode === 'month' ? 'h-[1.375rem] w-[1.375rem] text-[0.6875rem]' : 'h-[1.625rem] w-[1.625rem] text-[0.8125rem]'
+                                  <span className={`inline-flex items-center justify-center rounded-full bg-terracotta-500 text-white font-bold leading-none shadow-sm ${
+                                    mode === 'month' ? 'h-6 w-6 text-xs' : 'h-8 w-8 text-sm'
                                   }`}>
                                     {format(day, 'd')}
                                   </span>
@@ -602,6 +602,11 @@ export function CalendarView({
                                     ${isWeekend ? 'text-brown-700/30' : 'text-brown-700/60'}
                                   `}>
                                     {format(day, 'd')}
+                                  </span>
+                                )}
+                                {isCurrentDay && mode !== 'month' && (
+                                  <span className="rounded-full bg-terracotta-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-terracotta-600">
+                                    Today
                                   </span>
                                 )}
                               </div>
