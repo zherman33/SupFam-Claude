@@ -530,7 +530,12 @@ export interface Database {
       }
     }
     Views: Record<string, never>
-    Functions: Record<string, never>
+    Functions: {
+      redeem_promo_code: {
+        Args: { p_code: string }
+        Returns: { ok: boolean; error?: string; plan?: string } | null
+      }
+    }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>
   }
