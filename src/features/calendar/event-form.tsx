@@ -320,10 +320,10 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-brown-900/30 backdrop-blur-sm" onClick={onClose}/>
+      <div className="absolute inset-0 bg-brown-900/50 backdrop-blur-sm" onClick={onClose}/>
 
       {/* Sheet */}
-      <div className="relative z-10 w-full max-w-lg short-modal-container bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="relative z-10 w-full max-w-xl short-modal-container bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-sand-100 flex-shrink-0">
           <h2 className="font-semibold text-brown-800 text-base">
@@ -352,18 +352,15 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
-          <div className="px-5 py-4 space-y-4 short-form-grid">
-            
-            {/* Left Column */}
-            <div className="space-y-4">
-              {/* Title */}
-              <input
-                autoFocus
+          <div className="px-5 py-5 space-y-5">
+            {/* Title */}
+            <input
+              autoFocus={!isEdit}
                 type="text"
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 placeholder="Event title"
-                className="w-full text-lg font-semibold text-brown-800 placeholder:text-brown-700/30 focus:outline-none border-b border-sand-200 pb-2"
+                className="w-full text-xl font-semibold text-brown-800 placeholder:text-brown-700/30 focus:outline-none border-b border-sand-200 pb-2"
               />
 
               {/* Read-only notice for events synced from ICS subscriptions */}
@@ -373,66 +370,8 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
                 </div>
               )}
 
-              {/* All-day toggle */}
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setAllDay(v => !v)}
-                  className={`relative h-6 w-11 rounded-full transition-colors flex-shrink-0 ${allDay ? 'bg-terracotta-500' : 'bg-sand-300'}`}
-                >
-                  <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${allDay ? 'translate-x-5' : 'translate-x-0'}`}/>
-                </button>
-                <span className="text-sm text-brown-700">All day</span>
-              </div>
-
-              {/* Date/time pickers */}
-              <div className="space-y-3">
-                {/* Start Date & Time */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                  <span className="text-xs font-semibold text-brown-700/60 sm:w-12 flex-shrink-0">
-                    Start
-                  </span>
-                  <div className="flex items-center gap-2 flex-1">
-                    <CustomDatePicker
-                      value={startDate}
-                      onChange={val => {
-                        setStartDate(val)
-                        if (val > endDate) {
-                          setEndDate(val)
-                        }
-                      }}
-                    />
-                    {!allDay && (
-                      <CustomTimePicker
-                        value={startTime}
-                        onChange={setStartTime}
-                      />
-                    )}
-                  </div>
-                </div>
-
-                {/* End Date & Time */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                  <span className="text-xs font-semibold text-brown-700/60 sm:w-12 flex-shrink-0">
-                    End
-                  </span>
-                  <div className="flex items-center gap-2 flex-1">
-                    <CustomDatePicker
-                      value={endDate}
-                      onChange={setEndDate}
-                    />
-                    {!allDay && (
-                      <CustomTimePicker
-                        value={endTime}
-                        onChange={setEndTime}
-                      />
-                    )}
-                  </div>
-                </div>
-              </div>
-
               {/* Location */}
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-brown-700/60">Location</label>
                 <input
                   ref={locationInputRef}
@@ -440,23 +379,55 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
                   value={location}
                   onChange={e => setLocation(e.target.value)}
                   placeholder="Add location"
-                  className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3 py-2 text-sm text-brown-800 placeholder:text-brown-700/30 focus:border-terracotta-500 focus:outline-none"
+                  className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3.5 py-2.5 text-sm text-brown-800 placeholder:text-brown-700/30 focus:border-terracotta-500 focus:outline-none"
                 />
               </div>
-            </div>
 
-            {/* Right Column */}
-            <div className="space-y-4">
-              {/* Description */}
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-brown-700/60">Notes</label>
-                <textarea
-                  value={description}
-                  onChange={e => setDescription(e.target.value)}
-                  placeholder="Add notes"
-                  rows={2}
-                  className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3 py-2 text-sm text-brown-800 placeholder:text-brown-700/30 focus:border-terracotta-500 focus:outline-none resize-none"
-                />
+              {/* Details card */}
+              <div className="rounded-2xl border border-sand-200 bg-white divide-y divide-sand-100">
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-sm font-medium text-brown-800">All day</span>
+                  <button
+                    type="button"
+                    onClick={() => setAllDay(v => !v)}
+                    className={`relative h-7 w-12 rounded-full transition-colors flex-shrink-0 ${allDay ? 'bg-terracotta-500' : 'bg-sand-300'}`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${allDay ? 'translate-x-5' : 'translate-x-0'}`}/>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-3 px-4 py-2.5">
+                  <span className="w-14 flex-shrink-0 text-sm font-medium text-brown-800">Starts</span>
+                  <CustomDatePicker
+                    value={startDate}
+                    onChange={val => {
+                      setStartDate(val)
+                      if (val > endDate) {
+                        setEndDate(val)
+                      }
+                    }}
+                  />
+                  {!allDay && (
+                    <CustomTimePicker
+                      value={startTime}
+                      onChange={setStartTime}
+                    />
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3 px-4 py-2.5">
+                  <span className="w-14 flex-shrink-0 text-sm font-medium text-brown-800">Ends</span>
+                  <CustomDatePicker
+                    value={endDate}
+                    onChange={setEndDate}
+                  />
+                  {!allDay && (
+                    <CustomTimePicker
+                      value={endTime}
+                      onChange={setEndTime}
+                    />
+                  )}
+                </div>
               </div>
 
               {/* Calendar picker — compact dropdown of writable calendars */}
@@ -600,8 +571,18 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
                   </div>
                 </div>
               )}
-            </div>
 
+              {/* Notes */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-brown-700/60">Notes</label>
+                <textarea
+                  value={description}
+                  onChange={e => setDescription(e.target.value)}
+                  placeholder="Add notes"
+                  rows={3}
+                  className="w-full rounded-xl border border-sand-200 bg-cream-50 px-3.5 py-2.5 text-sm text-brown-800 placeholder:text-brown-700/30 focus:border-terracotta-500 focus:outline-none resize-none"
+                />
+              </div>
           </div>
 
           {/* Error Message */}
