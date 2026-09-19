@@ -15,6 +15,14 @@ export interface FamilyMember {
     name: string
     invite_code: string | null
     plan_tier: string
+    stripe_customer_id: string | null
+    stripe_subscription_id: string | null
+    subscription_status: string
+    plan_id: string
+    is_founding: boolean
+    trial_ends_at: string | null
+    current_period_end: string | null
+    cancel_at_period_end: boolean
     created_at: string
   }
 }

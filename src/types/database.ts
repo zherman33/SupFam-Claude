@@ -7,6 +7,14 @@ export interface Database {
           name: string
           invite_code: string | null
           plan_tier: string
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          subscription_status: string
+          plan_id: string
+          is_founding: boolean
+          trial_ends_at: string | null
+          current_period_end: string | null
+          cancel_at_period_end: boolean
           created_at: string
         }
         Insert: {
@@ -14,6 +22,14 @@ export interface Database {
           name: string
           invite_code?: string | null
           plan_tier?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_status?: string
+          plan_id?: string
+          is_founding?: boolean
+          trial_ends_at?: string | null
+          current_period_end?: string | null
+          cancel_at_period_end?: boolean
           created_at?: string
         }
         Update: {
@@ -21,6 +37,41 @@ export interface Database {
           name?: string
           invite_code?: string | null
           plan_tier?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_status?: string
+          plan_id?: string
+          is_founding?: boolean
+          trial_ends_at?: string | null
+          current_period_end?: string | null
+          cancel_at_period_end?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
+      subscription_events: {
+        Row: {
+          id: string
+          family_id: string | null
+          stripe_event_id: string
+          event_type: string
+          payload: unknown | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          family_id?: string | null
+          stripe_event_id: string
+          event_type: string
+          payload?: unknown | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          family_id?: string | null
+          stripe_event_id?: string
+          event_type?: string
+          payload?: unknown | null
           created_at?: string
         }
         Relationships: []

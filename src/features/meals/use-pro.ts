@@ -1,14 +1,12 @@
-import { useFamilyMember } from '@/features/auth/use-family-member'
+import { useSubscription } from '@/features/billing/use-subscription'
 
 /**
- * Pro entitlement check.
- *
- * Billing (Stripe) doesn't exist yet — when it does, a webhook flips
- * families.plan_tier and this hook starts enforcing automatically.
- * Until then every existing family was backfilled to 'pro' (founding beta),
- * so this is a real gate with a dormant lock.
+ * Pro entitlement check — driven by the family's Stripe subscription state.
+ * Grandfathered founding families (status 'active', no Stripe rows) pass.
+ * Past-due families keep working through a grace period; canceled/unpaid/
+ * expired families hit the paywall in App.tsx before this is ever consulted.
  */
 export function useProAccess(): boolean {
-  const { data: member } = useFamilyMember()
-  return member?.families?.plan_tier === 'pro'
+  const sub = useSubscription()
+  return sub?.isPro ?? false
 }

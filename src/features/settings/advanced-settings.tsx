@@ -37,7 +37,9 @@ const PRESET_COLORS = [
   { label: 'Terracotta', value: '#C4714F' },
 ]
 
-type SettingsTab = 'calendars' | 'rules' | 'device'
+import { BillingSettings } from '@/features/billing/billing-settings'
+
+type SettingsTab = 'calendars' | 'rules' | 'device' | 'billing'
 
 export function AdvancedSettings({ onClose }: { onClose: () => void }) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('calendars')
@@ -113,6 +115,17 @@ export function AdvancedSettings({ onClose }: { onClose: () => void }) {
               }
               label="Display & Device"
             />
+            <TabButton
+              active={activeTab === 'billing'}
+              onClick={() => setActiveTab('billing')}
+              icon={
+                <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
+                  <rect x="2.5" y="4" width="11" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M2.5 7h11" stroke="currentColor" strokeWidth="1.5" />
+                </svg>
+              }
+              label="Billing"
+            />
           </div>
         </div>
 
@@ -121,6 +134,7 @@ export function AdvancedSettings({ onClose }: { onClose: () => void }) {
           {activeTab === 'calendars' && <ConnectedCalendarsTab />}
           {activeTab === 'rules' && <EventColorRulesTab />}
           {activeTab === 'device' && <DisplayAndDeviceTab />}
+          {activeTab === 'billing' && <BillingSettings />}
         </div>
       </div>
     </div>
