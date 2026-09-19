@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { queryClient } from '@/lib/query-client'
 import { AdvancedSettings } from '@/features/settings/advanced-settings'
+import { ReleaseNotesPanel } from '@/features/settings/release-notes-panel'
 import { useAuth } from '@/features/auth/auth-context'
 import { useFamilyMember } from '@/features/auth/use-family-member'
 import { CalendarView, type CalendarMode } from '@/features/calendar/calendar-view'
@@ -41,6 +42,7 @@ export function Dashboard() {
   }, [mode])
   const [menuOpen, setMenuOpen] = useState(false)
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null)
+  const [releaseNotesOpen, setReleaseNotesOpen] = useState(false)
   const [calPickerOpen, setCalPickerOpen] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
@@ -301,20 +303,28 @@ export function Dashboard() {
 
               <div className="h-px bg-sand-100" />
 
-              {/* Sup Fam logo with version & update date */}
-              <div className="px-4 py-2 flex items-center justify-between">
+              {/* Sup Fam logo with version & update date — tap for release notes */}
+              <button
+                onClick={() => { setReleaseNotesOpen(true); setMenuOpen(false) }}
+                className="flex w-full items-center justify-between px-4 py-2 text-left hover:bg-cream-50 transition-colors"
+              >
                 <span className="font-handwritten text-xl text-terracotta-500 leading-none">
                   Sup Fam
                 </span>
-                <div className="text-right flex flex-col items-end">
-                  <span className="font-mono text-[11px] font-semibold text-brown-700/60 leading-none">
-                    {APP_VERSION}
+                <span className="flex items-center gap-1.5">
+                  <span className="text-right flex flex-col items-end">
+                    <span className="font-mono text-[11px] font-semibold text-brown-700/60 leading-none">
+                      {APP_VERSION}
+                    </span>
+                    <span className="text-[10px] text-brown-700/40 mt-1 leading-none">
+                      {APP_UPDATE_DATE}
+                    </span>
                   </span>
-                  <span className="text-[10px] text-brown-700/40 mt-1 leading-none">
-                    {APP_UPDATE_DATE}
-                  </span>
-                </div>
-              </div>
+                  <svg className="h-3.5 w-3.5 text-brown-700/30" viewBox="0 0 16 16" fill="none">
+                    <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </span>
+              </button>
 
               <div className="h-px bg-sand-100" />
 
@@ -341,6 +351,11 @@ export function Dashboard() {
       {/* Advanced Settings full-screen panel */}
       {advancedOpen && (
         <AdvancedSettings onClose={() => setAdvancedOpen(false)} />
+      )}
+
+      {/* Release notes panel */}
+      {releaseNotesOpen && (
+        <ReleaseNotesPanel onClose={() => setReleaseNotesOpen(false)} />
       )}
 
       {/* ── Main: task sidebar + calendar + optional right drawer ── */}
