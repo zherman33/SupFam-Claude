@@ -69,6 +69,11 @@ export function useOnboardingStep(): OnboardingStep | null {
   if (memberFetching && member === undefined) return null
   if (!member) return 'welcome'
 
+  // Explicit completion wins: "Enter Sup Fam" records this per member.
+  // (The checks below can never pass for someone who skipped calendars
+  // or hasn't invited anyone yet, which used to trap users in onboarding.)
+  if (member.onboarding_completed) return 'done'
+
   const status = member.families?.subscription_status ?? 'incomplete'
   const subscribed = status === 'trialing' || status === 'active' || checkoutSuccess
   if (!subscribed) return 'plan'
@@ -530,6 +535,9 @@ function InviteStep({ onDone }: { onDone: () => void }) {
   const { data: member } = useFamilyMember()
   const { data: members } = useFamilyMembers()
   const [copied, setCopied] = useState(false)
+  const [finishing, setFinishing] = useState(false)
+  const [error, setError] = useState('')
+  const queryClient = useQueryClient()
   const code = member?.families?.invite_code ?? ''
 
   const copy = async () => {
@@ -539,6 +547,23 @@ function InviteStep({ onDone }: { onDone: () => void }) {
       setTimeout(() => setCopied(false), 2000)
     } catch {
       /* clipboard unavailable — code is visible above */
+    }
+  }
+
+  const finish = async () => {
+    if (finishing) return
+    setFinishing(true)
+    setError('')
+    try {
+      const { data, error: rpcError } = await supabase.rpc('complete_onboarding')
+      if (rpcError) throw rpcError
+      const res = data as { ok: boolean; error?: string } | null
+      if (!res?.ok) throw new Error(res?.error ?? "Hmm, that didn't work — try again?")
+      await queryClient.invalidateQueries({ queryKey: ['family-member'] })
+      onDone()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Hmm, that didn't work — try again?")
+      setFinishing(false)
     }
   }
 
@@ -564,12 +589,16 @@ function InviteStep({ onDone }: { onDone: () => void }) {
       )}
       <div className="mx-auto mt-8 w-full max-w-sm">
         <button
-          onClick={onDone}
-          className="w-full rounded-2xl bg-brown-800 py-4 text-base font-semibold text-cream-50 hover:bg-brown-900"
+          onClick={finish}
+          disabled={finishing}
+          className="w-full rounded-2xl bg-brown-800 py-4 text-base font-semibold text-cream-50 hover:bg-brown-900 disabled:opacity-40"
           style={{ minHeight: 56 }}
         >
-          Enter Sup Fam
+          {finishing ? 'Getting things ready…' : 'Enter Sup Fam'}
         </button>
+        {error && (
+          <p className="mt-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>
+        )}
         <p className="mt-3 text-xs text-brown-700/40">
           They can join anytime later from Settings, too.
         </p>

@@ -10,6 +10,7 @@ export interface FamilyMember {
   role: 'admin' | 'member'
   avatar_color: string | null
   joined_at: string
+  onboarding_completed: boolean
   families?: {
     id: string
     name: string

@@ -553,6 +553,10 @@ export interface Database {
         Args: { p_name: string; p_display_name: string }
         Returns: { ok: boolean; error?: string; family?: { id: string; name: string; invite_code: string } } | null
       }
+      complete_onboarding: {
+        Args: Record<string, never>
+        Returns: { ok: boolean; error?: string } | null
+      }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>
