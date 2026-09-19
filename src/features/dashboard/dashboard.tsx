@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { queryClient } from '@/lib/query-client'
 import { AdvancedSettings } from '@/features/settings/advanced-settings'
 import { useAuth } from '@/features/auth/auth-context'
@@ -39,6 +40,7 @@ export function Dashboard() {
     localStorage.setItem('family-planner-calendar-mode', mode)
   }, [mode])
   const [menuOpen, setMenuOpen] = useState(false)
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null)
   const [calPickerOpen, setCalPickerOpen] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
@@ -110,11 +112,33 @@ export function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [member?.id])
 
+  // Close the ⋯ menu on resize/orientation change so the portaled
+  // popup never ends up floating at a stale position
+  useEffect(() => {
+    if (!menuOpen) return
+    const close = () => setMenuOpen(false)
+    window.addEventListener('resize', close)
+    window.addEventListener('orientationchange', close)
+    return () => {
+      window.removeEventListener('resize', close)
+      window.removeEventListener('orientationchange', close)
+    }
+  }, [menuOpen])
+
   // The ⋯ menu — rendered inside the calendar header via headerRight prop
   const dotsMenu = (
     <div className="relative ml-1" ref={menuRef}>
       <button
-        onClick={() => { setMenuOpen(v => !v); setCalPickerOpen(false) }}
+        onClick={() => {
+          if (!menuOpen && menuRef.current) {
+            // Anchor the portaled popup below the button (the header's
+            // overflow-x-auto strip would clip an absolutely-positioned one)
+            const r = menuRef.current.getBoundingClientRect()
+            setMenuPos({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) })
+          }
+          setMenuOpen(v => !v)
+          setCalPickerOpen(false)
+        }}
         className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
           menuOpen ? 'bg-sand-200 text-brown-800' : 'text-brown-700/40 hover:bg-sand-100 hover:text-brown-700'
         }`}
@@ -127,12 +151,17 @@ export function Dashboard() {
         </svg>
       </button>
 
-      {menuOpen && (
+      {menuOpen && menuPos && createPortal(
         <>
           {/* Backdrop */}
-          <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+          <div className="fixed inset-0 z-[55]" onClick={() => setMenuOpen(false)} />
 
-          <div className="absolute right-0 top-full z-50 mt-1.5 w-64 rounded-xl border border-sand-200 bg-white shadow-xl">
+          {/* Portaled to document.body so the header's overflow-x-auto strip
+              can't clip it; anchored below the ⋯ button */}
+          <div
+            className="fixed z-[60] w-64 rounded-xl border border-sand-200 bg-white shadow-xl"
+            style={{ top: menuPos.top, right: menuPos.right }}
+          >
 
             {/* Sync indicator */}
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-sand-100 bg-cream-50 rounded-t-xl">
@@ -301,7 +330,8 @@ export function Dashboard() {
               </button>
             </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   )
