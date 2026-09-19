@@ -63,7 +63,10 @@ function friendlyWriteError(raw: string): string {
     return 'No calendar was selected — pick a calendar and try again.'
   if (/event\.id required/i.test(raw))
     return "This event can't be saved back — it has no Google event ID (it may come from a read-only subscription)."
-  return raw
+  if (/invalid attendee/i.test(raw))
+    return 'One of the invite email addresses was rejected by Google. Try removing the invite and adding it again.'
+  // Never dump a raw API JSON blob into the UI — truncate as a last resort
+  return raw.length > 300 ? raw.slice(0, 300) + '…' : raw
 }
 
 export function useDefaultCalendar() {

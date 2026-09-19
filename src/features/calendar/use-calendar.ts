@@ -32,6 +32,8 @@ export interface ConnectedCalendar {
   last_synced_at: string | null
   ics_url?: string | null
   account_email?: string | null
+  /** Google account email, stored on the primary calendar row during sync */
+  google_account_email?: string | null
   // joined
   owner?: { display_name: string; avatar_color: string | null }
 }
