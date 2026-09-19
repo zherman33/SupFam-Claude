@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo, useCallback } from 'react'
+import { useEffect, useRef, useMemo, useCallback, type TouchEvent } from 'react'
 import { format, isToday, parseISO } from 'date-fns'
 import { useConnectedCalendars, type CalendarEvent } from './use-calendar'
 import { useEventColorRules, applyColorRules } from '@/features/settings/use-event-color-rules'
@@ -37,6 +37,9 @@ export function TimeGridView({
   const scrollRef = useRef<HTMLDivElement>(null)
   const activeWeekIdxRef = useRef(activeWeekIdx)
   const isProgrammaticScrollRef = useRef(false)
+  // Explicit swipe-gesture tracking. A left-to-right swipe (finger moves right)
+  // advances to the NEXT week; right-to-left goes to the previous week.
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null)
 
   const { data: colorRules } = useEventColorRules()
   const { data: calendars } = useConnectedCalendars()
@@ -106,6 +109,41 @@ export function TimeGridView({
     }
   }, [activeWeekIdx])
 
+  const handleTouchStart = useCallback((e: TouchEvent<HTMLDivElement>) => {
+    // Ignore multi-touch so pinch/zoom never triggers a week change
+    if (e.touches.length > 1) {
+      swipeStartRef.current = null
+      return
+    }
+    const t = e.touches[0]
+    swipeStartRef.current = { x: t.clientX, y: t.clientY }
+  }, [])
+
+  const handleTouchEnd = useCallback(
+    (e: TouchEvent<HTMLDivElement>) => {
+      const start = swipeStartRef.current
+      swipeStartRef.current = null
+      if (!start || !onWeekChange) return
+      const t = e.changedTouches[0]
+      const dx = t.clientX - start.x
+      const dy = t.clientY - start.y
+      // Committed horizontal gesture: enough distance and clearly horizontal
+      // (won't fire on vertical day-column scrolls, taps, or slow drags)
+      const SWIPE_MIN_PX = 60
+      if (Math.abs(dx) > SWIPE_MIN_PX && Math.abs(dx) > Math.abs(dy) * 1.25) {
+        const cur = activeWeekIdxRef.current
+        if (dx > 0) {
+          // Swipe left → right: next week
+          if (cur < weeks.length - 1) onWeekChange(cur + 1)
+        } else {
+          // Swipe right → left: previous week
+          if (cur > 0) onWeekChange(cur - 1)
+        }
+      }
+    },
+    [onWeekChange, weeks.length]
+  )
+
   const handleScroll = useCallback(() => {
     const el = scrollRef.current
     if (!el) return
@@ -127,12 +165,18 @@ export function TimeGridView({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
         className="flex-1 overflow-x-auto flex relative scrollbar-hide"
         style={{
           scrollSnapType: 'x mandatory',
           WebkitOverflowScrolling: 'touch',
           scrollbarWidth: 'none',
           overscrollBehaviorX: 'contain',
+          // Native horizontal panning is disabled so the explicit swipe
+          // gesture owns week changes; vertical day-column scrolling still
+          // works natively. Programmatic scrollTo (arrows/buttons) unaffected.
+          touchAction: 'pan-y',
         }}
       >
         {weeks.map((week, wi) => (
