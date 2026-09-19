@@ -76,6 +76,40 @@ export interface Database {
         }
         Relationships: []
       }
+      support_tickets: {
+        Row: {
+          id: string
+          family_id: string | null
+          user_id: string | null
+          name: string
+          email: string
+          message: string
+          status: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          family_id?: string | null
+          user_id?: string | null
+          name: string
+          email: string
+          message: string
+          status?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          family_id?: string | null
+          user_id?: string | null
+          name?: string
+          email?: string
+          message?: string
+          status?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+
       family_members: {
         Row: {
           id: string

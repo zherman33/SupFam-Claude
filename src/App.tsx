@@ -8,6 +8,8 @@ import { Paywall } from '@/features/billing/paywall'
 import { Dashboard } from '@/features/dashboard/dashboard'
 import { InstallPrompt } from '@/features/pwa/install-prompt'
 
+import { SupportWidget } from '@/features/support/support-widget'
+
 export default function App() {
   const { user, loading } = useAuth()
   const queryClient = useQueryClient()
@@ -18,10 +20,11 @@ export default function App() {
   const onboardingStep = useOnboardingStep()
   const subscription = useSubscription()
 
-  // Helper to wrap routes so the InstallPrompt is always available
+  // Helper to wrap routes so the InstallPrompt and support widget are always available
   const wrap = (children: React.ReactNode) => (
     <>
       <InstallPrompt />
+      <SupportWidget />
       {children}
     </>
   )
