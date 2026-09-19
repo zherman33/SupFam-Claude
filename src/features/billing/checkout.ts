@@ -2,7 +2,8 @@ import { supabase } from '@/lib/supabase'
 import type { PlanId } from './use-subscription'
 
 /**
- * Start a 30-day trial via Stripe Checkout (card collected upfront).
+ * Start Stripe Checkout (card collected upfront).
+ * Annual plans include a 30-day free trial; monthly starts billing immediately.
  * Redirects the browser to Stripe's hosted checkout page.
  * Throws a friendly Error when billing isn't configured yet.
  */

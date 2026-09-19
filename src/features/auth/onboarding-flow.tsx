@@ -316,6 +316,11 @@ function FamilyStep({ mode, onDone }: { mode: 'create' | 'join'; onDone: () => v
 function PlanStep({ onBack }: { onBack: () => void }) {
   const [busyPlan, setBusyPlan] = useState<PlanId | null>(null)
   const [error, setError] = useState('')
+  const [showPromo, setShowPromo] = useState(false)
+  const [promoCode, setPromoCode] = useState('')
+  const [promoBusy, setPromoBusy] = useState(false)
+  const [promoError, setPromoError] = useState('')
+  const queryClient = useQueryClient()
 
   const choose = async (plan: Exclude<PlanId, 'none'>) => {
     setBusyPlan(plan)
@@ -328,13 +333,36 @@ function PlanStep({ onBack }: { onBack: () => void }) {
     }
   }
 
+  const redeem = async () => {
+    if (!promoCode.trim() || promoBusy) return
+    setPromoBusy(true)
+    setPromoError('')
+    try {
+      const { data, error: rpcError } = await supabase.rpc('redeem_promo_code', {
+        p_code: promoCode.trim(),
+      })
+      if (rpcError) throw rpcError
+      const res = data as { ok: boolean; error?: string; plan?: string } | null
+      if (!res?.ok) {
+        setPromoError(res?.error ?? "That code didn't work — try again?")
+        return
+      }
+      // Refetch membership: status flips to active, onboarding advances past this step.
+      await queryClient.invalidateQueries({ queryKey: ['family-member'] })
+    } catch (e) {
+      setPromoError(e instanceof Error ? e.message : "That code didn't work — try again?")
+    } finally {
+      setPromoBusy(false)
+    }
+  }
+
   const order: Exclude<PlanId, 'none'>[] = ['founding', 'annual', 'monthly']
 
   return (
     <div className="pt-8 pb-10">
-      <h1 className="font-handwritten text-5xl text-terracotta-500">Start your trial</h1>
+      <h1 className="font-handwritten text-5xl text-terracotta-500">Choose your plan</h1>
       <p className="mt-2 font-display text-base text-brown-700/60">
-        30 days free, full access. Your card is only charged if you stay.
+        Annual plans start with 30 days free. Monthly starts today — cancel anytime.
       </p>
       <div className="mt-6 space-y-3">
         {order.map(planId => {
@@ -363,7 +391,11 @@ function PlanStep({ onBack }: { onBack: () => void }) {
               </div>
               <p className="mt-1 text-sm text-brown-700/55">{p.blurb}</p>
               <p className="mt-3 text-sm font-semibold text-terracotta-600">
-                {busyPlan === planId ? 'Opening checkout…' : 'Start 30-day free trial →'}
+                {busyPlan === planId
+                  ? 'Opening checkout…'
+                  : planId === 'monthly'
+                    ? 'Subscribe — first $12 today →'
+                    : 'Start 30-day free trial →'}
               </p>
             </button>
           )
@@ -371,8 +403,41 @@ function PlanStep({ onBack }: { onBack: () => void }) {
       </div>
       {error && <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
       <p className="mt-4 text-center text-xs text-brown-700/40">
-        Card required upfront · cancel anytime · $0 today
+        Card required upfront · cancel anytime · annual plans are $0 today
       </p>
+      <div className="mt-3 text-center">
+        {!showPromo ? (
+          <button
+            onClick={() => setShowPromo(true)}
+            className="text-sm font-medium text-brown-700/60 underline underline-offset-2"
+          >
+            Have a promo code?
+          </button>
+        ) : (
+          <div className="mx-auto max-w-xs">
+            <div className="flex gap-2">
+              <input
+                value={promoCode}
+                onChange={e => setPromoCode(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && redeem()}
+                placeholder="Enter code"
+                autoCapitalize="characters"
+                className="min-w-0 flex-1 rounded-xl border border-sand-200 bg-white px-4 py-3 text-sm text-brown-800 placeholder:text-brown-700/35 focus:border-terracotta-500 focus:outline-none"
+              />
+              <button
+                onClick={redeem}
+                disabled={promoBusy || !promoCode.trim()}
+                className="rounded-xl bg-brown-800 px-5 py-3 text-sm font-semibold text-cream-50 hover:bg-brown-900 disabled:opacity-40"
+              >
+                {promoBusy ? 'Checking…' : 'Apply'}
+              </button>
+            </div>
+            {promoError && (
+              <p className="mt-2 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600">{promoError}</p>
+            )}
+          </div>
+        )}
+      </div>
       <button onClick={onBack} className="mt-2 w-full py-2 text-sm text-brown-700/50">
         ← Back
       </button>

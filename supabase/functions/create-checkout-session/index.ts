@@ -126,22 +126,28 @@ Deno.serve(async (req) => {
     const appUrl =
       Deno.env.get("APP_URL") ?? req.headers.get("origin") ?? "https://app.supfam.app"
 
-    const session = await stripePost("checkout/sessions", {
+    const sessionParams: Record<string, string> = {
       mode: "subscription",
       customer: customerId!,
       "line_items[0][price]": priceId,
       "line_items[0][quantity]": "1",
-      "subscription_data[trial_period_days]": "30",
       "subscription_data[metadata][family_id]": family.id,
       "metadata[family_id]": family.id,
       "metadata[plan]": plan,
       success_url: `${appUrl}/onboarding?checkout=success`,
       cancel_url: `${appUrl}/onboarding?checkout=cancelled`,
       allow_promotion_codes: "true",
-    })
+    }
+
+    // The free trial is annual-only (founding + annual). Monthly starts billing immediately.
+    if (plan === "founding" || plan === "annual") {
+      sessionParams["subscription_data[trial_period_days]"] = "30"
+    }
+
+    const session = await stripePost("checkout/sessions", sessionParams)
 
     // Tentatively record the chosen plan; the webhook confirms on
-    // checkout.session.completed and flips status to trialing.
+    // checkout.session.completed and flips status to trialing (annual) or active (monthly).
     await supabase.from("families").update({ plan_id: plan }).eq("id", family.id)
 
     return json({ url: session.url })
