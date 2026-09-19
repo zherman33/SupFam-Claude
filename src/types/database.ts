@@ -323,6 +323,20 @@ export interface Database {
             referencedRelation: 'families'
             referencedColumns: ['id']
           },
+          {
+            foreignKeyName: 'tasks_assigned_to_fkey'
+            columns: ['assigned_to']
+            isOneToOne: false
+            referencedRelation: 'family_members'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'tasks_created_by_fkey'
+            columns: ['created_by']
+            isOneToOne: false
+            referencedRelation: 'family_members'
+            referencedColumns: ['id']
+          },
         ]
       }
       grocery_items: {
