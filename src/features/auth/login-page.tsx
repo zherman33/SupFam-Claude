@@ -1,7 +1,14 @@
+import { useEffect } from 'react'
 import { useAuth } from './auth-context'
+import { track } from '@/lib/telemetry'
 
 export function LoginPage() {
   const { signInWithGoogle } = useAuth()
+
+  // Top of the signup funnel: how many people land here vs create accounts.
+  useEffect(() => {
+    track('signup_viewed', {})
+  }, [])
 
   return (
     <div className="flex min-h-svh flex-col items-center justify-center bg-cream-100 px-6 pt-safe pb-safe">

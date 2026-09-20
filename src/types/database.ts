@@ -109,6 +109,57 @@ export interface Database {
         }
         Relationships: []
       }
+      product_events: {
+        Row: {
+          id: string
+          family_id: string | null
+          user_id: string | null
+          member_id: string | null
+          session_id: string
+          event: string
+          properties: Record<string, unknown>
+          occurred_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          family_id?: string | null
+          user_id?: string | null
+          member_id?: string | null
+          session_id: string
+          event: string
+          properties?: Record<string, unknown>
+          occurred_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          family_id?: string | null
+          user_id?: string | null
+          member_id?: string | null
+          session_id?: string
+          event?: string
+          properties?: Record<string, unknown>
+          occurred_at?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      staff_emails: {
+        Row: {
+          email: string
+          added_at: string
+        }
+        Insert: {
+          email: string
+          added_at?: string
+        }
+        Update: {
+          email?: string
+          added_at?: string
+        }
+        Relationships: []
+      }
 
       family_members: {
         Row: {
@@ -556,6 +607,18 @@ export interface Database {
       complete_onboarding: {
         Args: Record<string, never>
         Returns: { ok: boolean; error?: string } | null
+      }
+      is_staff: {
+        Args: Record<string, never>
+        Returns: boolean
+      }
+      ux_daily_screen_time: {
+        Args: { p_since: string }
+        Returns: { family_id: string; day: string; heartbeat_minutes: number; active_hours: number }[]
+      }
+      ux_funnel_first_seen: {
+        Args: { p_since: string }
+        Returns: { user_id: string; family_id: string | null; event: string; first_seen: string }[]
       }
     }
     Enums: Record<string, never>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth, flushPendingToken } from './auth-context'
@@ -6,6 +6,7 @@ import { useFamilyMember, useFamilyMembers } from './use-family-member'
 import { PLANS, type PlanId } from '@/features/billing/use-subscription'
 import { startCheckout } from '@/features/billing/checkout'
 import { AddCalendarModal } from '@/features/calendar/add-calendar-modal'
+import { track, trackForUser, type TelemetryIds } from '@/lib/telemetry'
 
 export type OnboardingStep =
   | 'welcome'
@@ -88,13 +89,77 @@ export function useOnboardingStep(): OnboardingStep | null {
   return 'done'
 }
 
+// ─── Telemetry ──────────────────────────────────────────────────────────
+
+/**
+ * Funnel instrumentation: fires onboarding_step_viewed on every step entry
+ * and onboarding_step_completed (with time-on-step) on every exit, plus a
+ * single onboarding_started on first entry. Powers the UX dashboard's
+ * drop-off and "where users get stuck" views.
+ */
+function useOnboardingTelemetry(step: OnboardingStep | null, ids: TelemetryIds) {
+  const idsRef = useRef(ids)
+  const prevRef = useRef<{ step: OnboardingStep; at: number } | null>(null)
+
+  // Keep ids fresh as the member row loads (heartbeats/steps read via ref).
+  useEffect(() => {
+    idsRef.current = ids
+  })
+
+  useEffect(() => {
+    if (!step || step === 'done') return
+    const prev = prevRef.current
+    if (!prev) {
+      track('onboarding_started', { first_step: step }, idsRef.current)
+    } else if (prev.step !== step) {
+      track(
+        'onboarding_step_completed',
+        { step: prev.step, duration_ms: Date.now() - prev.at },
+        idsRef.current,
+      )
+    }
+    if (!prev || prev.step !== step) {
+      track('onboarding_step_viewed', { step }, idsRef.current)
+      prevRef.current = { step, at: Date.now() }
+    }
+  }, [step])
+}
+
 // ─── Main flow ────────────────────────────────────────────────────────────
 
 export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
   const initial = useOnboardingStep()
+  const { user } = useAuth()
+  const { data: member } = useFamilyMember()
   const [step, setStep] = useState<OnboardingStep | null>(null)
   const [mode, setMode] = useState<'create' | 'join'>('create')
   const queryClient = useQueryClient()
+
+  useOnboardingTelemetry(step, {
+    userId: user?.id,
+    memberId: member?.id,
+    familyId: member?.family_id,
+  })
+
+  // subscription_activated: the moment billing flips to trialing/active
+  // (covers Stripe redirect returns and promo redemptions alike).
+  const activatedRef = useRef<string | null>(null)
+  useEffect(() => {
+    const status = member?.families?.subscription_status
+    const fid = member?.family_id
+    if (
+      (status === 'trialing' || status === 'active') &&
+      fid &&
+      activatedRef.current !== fid
+    ) {
+      activatedRef.current = fid
+      track(
+        'subscription_activated',
+        { status },
+        { userId: user?.id, memberId: member?.id, familyId: fid },
+      )
+    }
+  }, [member?.families?.subscription_status, member?.family_id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Adopt the derived step whenever server state changes (e.g. after
   // family creation or Stripe redirect), unless the user is mid-form.
@@ -226,11 +291,16 @@ function FamilyStep({ mode, onDone }: { mode: 'create' | 'join'; onDone: () => v
         p_display_name: displayName.trim(),
       })
       if (rpcError) throw rpcError
-      const res = data as { ok: boolean; error?: string } | null
+      const res = data as { ok: boolean; error?: string; family?: { id: string } } | null
       if (!res?.ok) {
         setError(res?.error ?? "Hmm, that didn't work — try again?")
         return
       }
+      track(
+        'family_created',
+        { mode: 'create' },
+        { userId: user.id, familyId: res.family?.id ?? null },
+      )
       await flushPendingToken(user.id)
       onDone()
     } catch {
@@ -253,6 +323,10 @@ function FamilyStep({ mode, onDone }: { mode: 'create' | 'join'; onDone: () => v
       })
       if (rpcError) throw rpcError
       await flushPendingToken(user.id)
+      // A second (or third…) human just joined the household — the core
+      // activation signal for a family product.
+      void trackForUser('family_joined', { mode: 'join' }, user.id)
+      void trackForUser('family_member_added', { via: 'invite_code' }, user.id)
       onDone()
     } catch {
       setError("Couldn't find that code — double-check it?")
@@ -322,6 +396,7 @@ function FamilyStep({ mode, onDone }: { mode: 'create' | 'join'; onDone: () => v
 }
 
 function PlanStep({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth()
   const [busyPlan, setBusyPlan] = useState<PlanId | null>(null)
   const [error, setError] = useState('')
   const [showPromo, setShowPromo] = useState(false)
@@ -334,6 +409,7 @@ function PlanStep({ onBack }: { onBack: () => void }) {
     setBusyPlan(plan)
     setError('')
     try {
+      track('checkout_started', { plan }, { userId: user?.id })
       await startCheckout(plan) // redirects to Stripe
     } catch (e) {
       setError(e instanceof Error ? e.message : "Hmm, that didn't work — try again?")
@@ -355,6 +431,7 @@ function PlanStep({ onBack }: { onBack: () => void }) {
         setPromoError(res?.error ?? "That code didn't work — try again?")
         return
       }
+      track('promo_redeemed', { plan: res.plan ?? 'unknown' }, { userId: user?.id })
       // Refetch membership: status flips to active, onboarding advances past this step.
       await queryClient.invalidateQueries({ queryKey: ['family-member'] })
     } catch (e) {
@@ -455,10 +532,11 @@ function PlanStep({ onBack }: { onBack: () => void }) {
 
 function CalendarsStep({ onNext }: { onNext: () => void }) {
   const { data: member } = useFamilyMember()
-  const { signInWithGoogle } = useAuth()
+  const { user, signInWithGoogle } = useAuth()
   const [showAdd, setShowAdd] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const queryClient = useQueryClient()
+  const connectedTracked = useRef(false)
 
   const { data: calendars } = useQuery({
     queryKey: ['onboarding-calendars', member?.id],
@@ -485,6 +563,14 @@ function CalendarsStep({ onNext }: { onNext: () => void }) {
   useEffect(() => {
     // If calendars appeared (e.g. after returning from Google), move on.
     if (calendars && calendars.length > 0) {
+      if (!connectedTracked.current) {
+        connectedTracked.current = true
+        track(
+          'calendar_connected',
+          { provider: calendars[0].provider, count: calendars.length },
+          { userId: user?.id, memberId: member?.id, familyId: member?.family_id },
+        )
+      }
       const t = setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['family-member'] })
         onNext()
@@ -538,6 +624,7 @@ function CalendarsStep({ onNext }: { onNext: () => void }) {
 }
 
 function InviteStep({ onDone }: { onDone: () => void }) {
+  const { user } = useAuth()
   const { data: member } = useFamilyMember()
   const { data: members } = useFamilyMembers()
   const [copied, setCopied] = useState(false)
@@ -566,6 +653,13 @@ function InviteStep({ onDone }: { onDone: () => void }) {
       const res = data as { ok: boolean; error?: string } | null
       if (!res?.ok) throw new Error(res?.error ?? "Hmm, that didn't work — try again?")
       await queryClient.invalidateQueries({ queryKey: ['family-member'] })
+      if (user) {
+        void trackForUser(
+          'onboarding_completed',
+          { member_count: members?.length ?? 1 },
+          user.id,
+        )
+      }
       onDone()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Hmm, that didn't work — try again?")

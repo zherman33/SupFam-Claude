@@ -7,6 +7,7 @@ import {
 } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
+import { track } from '@/lib/telemetry'
 import { App } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
 import { Capacitor } from '@capacitor/core'
@@ -96,6 +97,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (event === 'SIGNED_IN' && session?.provider_token) {
         await storeCalendarTokens(session)
       }
+
+      // Product telemetry: every sign-in + first-ever account creation.
+      if (event === 'SIGNED_IN' && session) {
+        void trackSignInAnalytics(session)
+      }
     })
 
     return () => subscription.unsubscribe()
@@ -182,6 +188,35 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider')
   }
   return context
+}
+
+/**
+ * Product telemetry for sign-ins. `signed_in` fires every session;
+ * `account_created` fires once per account — the first time we see a
+ * sign-in with no family_members row (Google OAuth has no separate
+ * sign-up step, so this is how we detect a brand-new account).
+ * The UX dashboard dedupes account_created by user, so a stray
+ * double-fire is harmless.
+ */
+async function trackSignInAnalytics(session: Session) {
+  const userId = session.user.id
+  const provider = session.user.app_metadata?.provider ?? 'google'
+  track('signed_in', { provider }, { userId })
+
+  const flag = `supfam_account_created_${userId}`
+  try {
+    if (localStorage.getItem(flag)) return
+    const { count } = await supabase
+      .from('family_members')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+    if ((count ?? 0) === 0) {
+      track('account_created', { provider }, { userId })
+    }
+    localStorage.setItem(flag, '1')
+  } catch {
+    /* telemetry must never break sign-in */
+  }
 }
 
 /**

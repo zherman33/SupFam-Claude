@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { Capacitor } from '@capacitor/core'
 import { useAuth } from '@/features/auth/auth-context'
 import { useFamilyMember } from '@/features/auth/use-family-member'
 import { LoginPage } from '@/features/auth/login-page'
@@ -7,6 +9,9 @@ import { useSubscription } from '@/features/billing/use-subscription'
 import { Paywall } from '@/features/billing/paywall'
 import { Dashboard } from '@/features/dashboard/dashboard'
 import { InstallPrompt } from '@/features/pwa/install-prompt'
+import { track } from '@/lib/telemetry'
+import { useIsStaff } from '@/features/admin/use-is-staff'
+import { UxDashboard } from '@/features/admin/ux-dashboard'
 
 import { SupportWidget } from '@/features/support/support-widget'
 
@@ -19,6 +24,56 @@ export default function App() {
   const { data: familyMember, isFetching: memberFetching } = useFamilyMember()
   const onboardingStep = useOnboardingStep()
   const subscription = useSubscription()
+  const isStaff = useIsStaff()
+  const [adminView, setAdminView] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('view') === 'admin',
+  )
+
+  // ── Product telemetry: session usage (screen time) ──
+  // app_opened brackets the session; app_heartbeat fires once a minute
+  // while the tab is visible; app_closed records session length.
+  // The UX dashboard turns heartbeats into per-family screen-time hours
+  // and "always-on display" detection (the 24/7 iPad pattern).
+  const sessionStartRef = useRef<number | null>(null)
+  const telemetryIdsRef = useRef({ userId: user?.id, memberId: familyMember?.id, familyId: familyMember?.family_id })
+  // Keep the ids ref fresh for heartbeats (ref writes belong in effects).
+  useEffect(() => {
+    telemetryIdsRef.current = { userId: user?.id, memberId: familyMember?.id, familyId: familyMember?.family_id }
+  })
+
+  useEffect(() => {
+    if (!user) return
+    const closeSession = () => {
+      if (sessionStartRef.current !== null) {
+        track(
+          'app_closed',
+          { session_duration_ms: Date.now() - sessionStartRef.current },
+          telemetryIdsRef.current,
+        )
+        sessionStartRef.current = null
+      }
+    }
+    sessionStartRef.current = Date.now()
+    track(
+      'app_opened',
+      { platform: Capacitor.isNativePlatform() ? 'native' : 'web' },
+      telemetryIdsRef.current,
+    )
+    const heartbeatId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        track('app_heartbeat', {}, telemetryIdsRef.current)
+      }
+    }, 60_000)
+    window.addEventListener('pagehide', closeSession)
+    return () => {
+      window.clearInterval(heartbeatId)
+      window.removeEventListener('pagehide', closeSession)
+      closeSession()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
 
   // Helper to wrap routes so the InstallPrompt and support widget are always available
   const wrap = (children: React.ReactNode) => (
@@ -28,6 +83,20 @@ export default function App() {
       {children}
     </>
   )
+
+  // Staff-only embedded UX analytics dashboard (?view=admin).
+  if (isStaff && adminView) {
+    return wrap(
+      <UxDashboard
+        onExit={() => {
+          setAdminView(false)
+          const u = new URL(window.location.href)
+          u.searchParams.delete('view')
+          window.history.replaceState({}, '', u.toString())
+        }}
+      />,
+    )
+  }
 
   // Only show the splash while:
   // 1. Auth state is still resolving from Supabase

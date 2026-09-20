@@ -17,12 +17,14 @@ import { TaskForm } from '@/features/tasks/task-form'
 import { useCalendarEvents, useSyncCalendars, useConnectedCalendars } from '@/features/calendar/use-calendar'
 import { SystemSettings } from '@/lib/system-settings'
 import { APP_VERSION, APP_UPDATE_DATE } from '@/lib/version'
+import { useIsStaff } from '@/features/admin/use-is-staff'
 
 type Drawer = 'grocery' | 'notes' | null
 
 export function Dashboard() {
   const { signOut } = useAuth()
   const { data: member } = useFamilyMember()
+  const isStaff = useIsStaff()
   const { data: tasks } = useTasks()
   const { data: events, isFetching: isFetchingEvents } = useCalendarEvents()
   const { data: calendars } = useConnectedCalendars()
@@ -302,6 +304,27 @@ export function Dashboard() {
               </div>
 
               <div className="h-px bg-sand-100" />
+
+              {/* Staff-only: embedded UX analytics dashboard */}
+              {isStaff && (
+                <>
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false)
+                      const u = new URL(window.location.href)
+                      u.searchParams.set('view', 'admin')
+                      window.location.href = u.toString()
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-brown-700 hover:bg-cream-50 transition-colors"
+                  >
+                    <svg className="h-4 w-4 opacity-50" viewBox="0 0 16 16" fill="none">
+                      <path d="M2 14h12M4 14V8M8 14V4M12 14v-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                    Experience analytics
+                  </button>
+                  <div className="h-px bg-sand-100" />
+                </>
+              )}
 
               {/* Sup Fam logo with version & update date — tap for release notes */}
               <button
