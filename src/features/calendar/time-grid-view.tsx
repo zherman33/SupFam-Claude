@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo, useCallback, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useMemo, useCallback } from 'react'
 import { format, isToday, parseISO } from 'date-fns'
 import { useConnectedCalendars, type CalendarEvent } from './use-calendar'
 import { useEventColorRules, applyColorRules } from '@/features/settings/use-event-color-rules'
@@ -40,23 +40,16 @@ export function TimeGridView({
 
   // Finger-drag state for the week pager.
   //
-  // Why manual: on iOS a touch gesture latches to the first (inner) scroller
-  // it hits — the day columns' vertical event lists — so the outer horizontal
-  // scroller never receives the pan and native swiping silently does nothing.
-  // We own the horizontal gesture with Pointer Events instead: touch-action
-  // pan-y keeps vertical day scrolling native, while horizontal pans come to
-  // us. The track follows the finger 1:1 via scrollLeft, then snaps on release.
-  const dragRef = useRef<{
-    pointerId: number
-    startX: number
-    startY: number
-    startScrollLeft: number
-    committed: boolean
-    movedFar: boolean
-    lastX: number
-    lastT: number
-    velocity: number // px/ms of scrollLeft; positive = heading to next week
-  } | null>(null)
+  // Why manual, and why raw Touch Events: on iOS a touch gesture latches to
+  // the first (inner) scroller it hits — the day columns' vertical event
+  // lists. iOS decides asynchronously: a few moves come through, then it
+  // claims the gesture (pointercancel) and the page snaps back — the "moves
+  // a little but doesn't work" symptom. The fix is a non-passive touchmove
+  // listener: once the gesture is clearly horizontal we preventDefault(),
+  // which stops iOS from ever claiming it as a native scroll. Vertical pans
+  // are never prevented, so day-column scrolling stays native. (React's
+  // synthetic onTouchMove is passive, so these listeners are attached
+  // natively with { passive: false } in the effect below.)
   const suppressClickRef = useRef(false)
 
   const { data: colorRules } = useEventColorRules()
@@ -143,81 +136,98 @@ export function TimeGridView({
     }
   }, [weeks.length, onWeekChange])
 
-  // ── Finger-drag paging ────────────────────────────────────────────────
+  // ── Finger-drag paging (raw Touch Events; see note at the top) ──────────
 
-  const onPointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!e.isPrimary || dragRef.current) return
+  useEffect(() => {
     const el = scrollRef.current
     if (!el) return
-    dragRef.current = {
-      pointerId: e.pointerId,
-      startX: e.clientX,
-      startY: e.clientY,
-      startScrollLeft: el.scrollLeft,
-      committed: false,
-      movedFar: false,
-      lastX: e.clientX,
-      lastT: performance.now(),
-      velocity: 0,
-    }
-  }, [])
 
-  const onPointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    const drag = dragRef.current
-    const el = scrollRef.current
-    if (!drag || !el || e.pointerId !== drag.pointerId) return
-    const dx = e.clientX - drag.startX
-    const dy = e.clientY - drag.startY
+    let drag: {
+      id: number
+      startX: number
+      startY: number
+      startScrollLeft: number
+      claimed: boolean // horizontal — we own it
+      dead: boolean // vertical — native scroll owns it
+      movedFar: boolean
+      lastX: number
+      lastT: number
+      velocity: number // px/ms of scrollLeft; positive = heading to next week
+    } | null = null
 
-    if (!drag.committed) {
-      // Commit to a horizontal drag only once the gesture is clearly
-      // horizontal — taps and vertical pans stay native and untouched.
-      if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) {
-        drag.committed = true
-        try {
-          el.setPointerCapture(e.pointerId)
-        } catch {
-          /* capture unavailable — drag still works */
-        }
-        el.style.scrollSnapType = 'none'
-      } else if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) {
-        // Clearly vertical: hand the gesture back; native scroll owns it.
-        dragRef.current = null
-        return
-      } else {
-        return
+    const onTouchStart = (e: TouchEvent) => {
+      if (drag || e.touches.length !== 1) return
+      const t = e.touches[0]
+      drag = {
+        id: t.identifier,
+        startX: t.clientX,
+        startY: t.clientY,
+        startScrollLeft: el.scrollLeft,
+        claimed: false,
+        dead: false,
+        movedFar: false,
+        lastX: t.clientX,
+        lastT: performance.now(),
+        velocity: 0,
       }
     }
 
-    const now = performance.now()
-    const dt = Math.max(1, now - drag.lastT)
-    // scrollLeft grows as the finger moves left (toward the next week).
-    drag.velocity = -((e.clientX - drag.lastX) / dt)
-    drag.lastX = e.clientX
-    drag.lastT = now
-    if (Math.abs(dx) > 8) drag.movedFar = true
-    el.scrollLeft = drag.startScrollLeft - dx
-  }, [])
+    const findTouch = (e: TouchEvent): Touch | null => {
+      if (!drag) return null
+      const all = [...e.touches, ...e.changedTouches]
+      return all.find(t => t.identifier === drag!.id) ?? null
+    }
 
-  const endDrag = useCallback(
-    (e: ReactPointerEvent<HTMLDivElement>, cancelled: boolean) => {
-      const drag = dragRef.current
-      const el = scrollRef.current
-      dragRef.current = null
-      if (!drag || !el || e.pointerId !== drag.pointerId) return
+    const onTouchMove = (e: TouchEvent) => {
+      const t = findTouch(e)
+      if (!t || !drag || drag.dead) return
+      const dx = t.clientX - drag.startX
+      const dy = t.clientY - drag.startY
+
+      if (!drag.claimed) {
+        // Claim the gesture only once it's clearly horizontal — taps and
+        // vertical pans stay native and untouched.
+        if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) {
+          drag.claimed = true
+          el.style.scrollSnapType = 'none'
+        } else if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) {
+          // Clearly vertical: hand the gesture back; native scroll owns it.
+          drag.dead = true
+          return
+        } else {
+          return
+        }
+      }
+
+      // Claimed: preventDefault() stops iOS from hijacking the gesture as a
+      // native scroll (which would cancel us mid-drag and snap back).
+      if (e.cancelable) e.preventDefault()
+      const now = performance.now()
+      const dt = Math.max(1, now - drag.lastT)
+      // scrollLeft grows as the finger moves left (toward the next week).
+      drag.velocity = -((t.clientX - drag.lastX) / dt)
+      drag.lastX = t.clientX
+      drag.lastT = now
+      if (Math.abs(dx) > 8) drag.movedFar = true
+      el.scrollLeft = drag.startScrollLeft - dx
+    }
+
+    const endTouch = (cancelled: boolean) => {
+      const d = drag
+      drag = null
       el.style.scrollSnapType = ''
-      if (!drag.committed) return
+      if (!d || d.dead || !d.claimed) return
 
       const weekWidth = el.clientWidth
       if (weekWidth <= 0) return
       let target = Math.round(el.scrollLeft / weekWidth)
       // Fast flick: carry into the neighboring week even before halfway.
-      if (!cancelled && Math.abs(drag.velocity) > 0.6) {
-        target += drag.velocity > 0 ? 1 : -1
+      if (!cancelled && Math.abs(d.velocity) > 0.6) {
+        target += d.velocity > 0 ? 1 : -1
       }
       target = Math.max(0, Math.min(weeks.length - 1, target))
 
-      if (drag.movedFar) {
+      if (d.movedFar) {
         // Swallow the click that follows a drag so a swipe never opens
         // the event form. The timeout is a backstop in case no click fires.
         suppressClickRef.current = true
@@ -226,29 +236,39 @@ export function TimeGridView({
         }, 350)
       }
 
+      // Commit the target week immediately so the header label updates
+      // without waiting for the snap animation. The [activeWeekIdx] effect
+      // no-ops because the ref already matches.
+      if (activeWeekIdxRef.current !== target) {
+        activeWeekIdxRef.current = target
+        onWeekChange?.(target)
+      }
       const targetLeft = target * weekWidth
       if (Math.abs(el.scrollLeft - targetLeft) > 2) {
         isProgrammaticScrollRef.current = true
         el.scrollTo({ left: targetLeft, behavior: 'smooth' })
         setTimeout(() => {
           isProgrammaticScrollRef.current = false
-        }, 400)
-      } else if (target !== activeWeekIdxRef.current) {
-        activeWeekIdxRef.current = target
-        onWeekChange?.(target)
+        }, 450)
       }
-    },
-    [weeks.length, onWeekChange]
-  )
+    }
 
-  const onPointerUp = useCallback(
-    (e: ReactPointerEvent<HTMLDivElement>) => endDrag(e, false),
-    [endDrag]
-  )
-  const onPointerCancel = useCallback(
-    (e: ReactPointerEvent<HTMLDivElement>) => endDrag(e, true),
-    [endDrag]
-  )
+    const onTouchEnd = (e: TouchEvent) => {
+      if (findTouch(e)) endTouch(false)
+    }
+    const onTouchCancel = () => endTouch(true)
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    el.addEventListener('touchend', onTouchEnd)
+    el.addEventListener('touchcancel', onTouchCancel)
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', onTouchEnd)
+      el.removeEventListener('touchcancel', onTouchCancel)
+    }
+  }, [weeks.length, onWeekChange])
 
   // Capture-phase: runs before day/event click handlers, so a swipe that
   // ends over an event or day cell can't trigger its tap action.
@@ -265,10 +285,6 @@ export function TimeGridView({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerCancel}
         onClickCapture={onClickCapture}
         className="flex-1 overflow-x-auto flex relative scrollbar-hide"
         style={{

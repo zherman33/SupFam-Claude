@@ -12,6 +12,14 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: 'v1.1.7',
+    date: 'Sep 19, 2026',
+    notes: [
+      'Swiping between weeks in the 1-week view now follows your finger — quick flicks hop a week too.',
+      'A slimmer Week / 3 Weeks / Month switcher that fits neatly on phones.',
+    ],
+  },
+  {
     version: 'v1.1.6',
     date: 'Sep 19, 2026',
     notes: [
@@ -25,7 +33,6 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     version: 'v1.1.5',
     date: 'Sep 19, 2026',
     notes: [
-      'Swipe left or right in the 1-week view to move between weeks.',
       'A fresher calendar: calmer events, a tidier header, and today stands out more.',
       'The ⋯ menu in the corner now opens properly.',
       'New dinner board: plan the week’s meals, then send the grocery list to Shipt or Amazon Fresh.',

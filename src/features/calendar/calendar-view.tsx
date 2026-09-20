@@ -382,14 +382,14 @@ export function CalendarView({
         </div>
 
         {/* Right controls — view switcher + calendar filters + ⋯ */}
-        <div className="ml-auto flex items-center gap-1.5 relative z-10 max-w-[48%] overflow-x-auto no-scrollbar py-0.5">
+        <div className="ml-auto flex items-center gap-1.5 relative z-10 max-w-[62%] overflow-x-auto no-scrollbar py-0.5">
           {onModeChange && (
-            <div className="flex items-center gap-0.5 rounded-xl bg-sand-100 p-1 flex-shrink-0">
+            <div className="flex items-center gap-0.5 rounded-full bg-sand-100 p-0.5 flex-shrink-0">
               {(['week', '3week', 'month'] as CalendarMode[]).map(m => (
                 <button
                   key={m}
                   onClick={() => onModeChange(m)}
-                  className={`rounded-lg px-4 min-h-[44px] text-[13px] font-semibold transition-colors ${
+                  className={`rounded-full h-10 px-3.5 text-[13px] font-semibold whitespace-nowrap transition-colors ${
                     mode === m
                       ? 'bg-white text-brown-800 shadow-sm'
                       : 'text-brown-700/50 hover:text-brown-800 active:text-brown-800'
