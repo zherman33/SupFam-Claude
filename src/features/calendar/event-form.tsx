@@ -14,7 +14,7 @@ import {
   parse,
 } from 'date-fns'
 import { useFamilyMember, useFamilyMembers } from '@/features/auth/use-family-member'
-import { useConnectedCalendars, type CalendarEvent, isReadOnlyCalendar } from './use-calendar'
+import { useConnectedCalendars, type CalendarEvent, isReadOnlyCalendar, getEventDateBounds } from './use-calendar'
 import {
   useCreateEvent,
   useUpdateEvent,
@@ -59,6 +59,12 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
   )
   const [endTime, setEndTime] = useState(
     event?.end_at && !event.all_day ? format(parseISO(event.end_at), 'HH:mm') : '10:00'
+  )
+  // Single-day events (the common case) show one date + start/end times.
+  // Multi-day is a secondary opt-in. In edit mode, derive it from the event
+  // (getEventDateBounds handles Google's exclusive all-day end convention).
+  const [multiDay, setMultiDay] = useState(
+    () => isEdit && !!event && getEventDateBounds(event).isMultiDay
   )
   const [description, setDescription] = useState(event?.description ?? '')
   const [location, setLocation] = useState(event?.location ?? '')
@@ -210,9 +216,27 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
 
   const isPending = createEvent.isPending || updateEvent.isPending || deleteEvent.isPending
 
+  // Single-day mode keeps the end date glued to the start date.
+  const handleStartDateChange = (val: string) => {
+    setStartDate(val)
+    if (!multiDay || val > endDate) {
+      setEndDate(val)
+    }
+  }
+
+  const toggleMultiDay = () => {
+    if (multiDay) {
+      // Collapsing back to a single day — drop the separate end date.
+      setEndDate(startDate)
+    }
+    setMultiDay(!multiDay)
+  }
+
   const buildEventPayload = () => {
+    // In single-day mode the event ends on its start date.
+    const effEndDate = multiDay ? endDate : startDate
     const start = allDay ? startDate : `${startDate}T${startTime}:00`
-    const end = allDay ? endDate : `${endDate}T${endTime}:00`
+    const end = allDay ? effEndDate : `${effEndDate}T${endTime}:00`
     return {
       id: event?.external_event_id ?? undefined,
       title,
@@ -434,37 +458,75 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
                   </button>
                 </div>
 
-                <div className="flex items-center gap-3 px-4 py-2">
-                  <span className="w-14 flex-shrink-0 text-sm font-medium text-brown-800">Starts</span>
-                  <CustomDatePicker
-                    value={startDate}
-                    onChange={val => {
-                      setStartDate(val)
-                      if (val > endDate) {
-                        setEndDate(val)
-                      }
-                    }}
-                  />
-                  {!allDay && (
-                    <CustomTimePicker
-                      value={startTime}
-                      onChange={setStartTime}
-                    />
-                  )}
-                </div>
+                {/* Date & time — single date + start/end times by default;
+                    multi-day is a secondary opt-in to keep the form uncluttered. */}
+                {multiDay ? (
+                  <>
+                    <div className="flex items-center gap-3 px-4 py-2">
+                      <span className="w-14 flex-shrink-0 text-sm font-medium text-brown-800">Starts</span>
+                      <CustomDatePicker
+                        value={startDate}
+                        onChange={handleStartDateChange}
+                      />
+                      {!allDay && (
+                        <CustomTimePicker
+                          value={startTime}
+                          onChange={setStartTime}
+                        />
+                      )}
+                    </div>
 
-                <div className="flex items-center gap-3 px-4 py-2">
-                  <span className="w-14 flex-shrink-0 text-sm font-medium text-brown-800">Ends</span>
-                  <CustomDatePicker
-                    value={endDate}
-                    onChange={setEndDate}
-                  />
-                  {!allDay && (
-                    <CustomTimePicker
-                      value={endTime}
-                      onChange={setEndTime}
-                    />
-                  )}
+                    <div className="flex items-center gap-3 px-4 py-2">
+                      <span className="w-14 flex-shrink-0 text-sm font-medium text-brown-800">Ends</span>
+                      <CustomDatePicker
+                        value={endDate}
+                        onChange={val => {
+                          setEndDate(val < startDate ? startDate : val)
+                        }}
+                      />
+                      {!allDay && (
+                        <CustomTimePicker
+                          value={endTime}
+                          onChange={setEndTime}
+                        />
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3 px-4 py-2">
+                      <span className="w-14 flex-shrink-0 text-sm font-medium text-brown-800">Date</span>
+                      <CustomDatePicker
+                        value={startDate}
+                        onChange={handleStartDateChange}
+                      />
+                    </div>
+
+                    {!allDay && (
+                      <div className="flex items-center gap-3 px-4 py-2">
+                        <span className="w-14 flex-shrink-0 text-sm font-medium text-brown-800">Time</span>
+                        <CustomTimePicker
+                          value={startTime}
+                          onChange={setStartTime}
+                        />
+                        <span className="text-sm text-brown-700/40">–</span>
+                        <CustomTimePicker
+                          value={endTime}
+                          onChange={setEndTime}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <div className="px-4 py-2">
+                  <button
+                    type="button"
+                    onClick={toggleMultiDay}
+                    className="text-xs font-semibold text-terracotta-600 hover:text-terracotta-700"
+                  >
+                    {multiDay ? '− Back to single day' : '+ Multi-day event'}
+                  </button>
                 </div>
               </div>
 

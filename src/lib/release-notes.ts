@@ -12,6 +12,13 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: 'v1.1.9',
+    date: 'Oct 1, 2026',
+    notes: [
+      'Adding an event is simpler now: one date with a start and end time by default — multi-day is a tap away when you need it.',
+    ],
+  },
+  {
     version: 'v1.1.8',
     date: 'Oct 1, 2026',
     notes: [
