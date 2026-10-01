@@ -12,6 +12,15 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: 'v1.1.8',
+    date: 'Oct 1, 2026',
+    notes: [
+      'Fixed: opening an event now dims the whole screen properly — the view switcher no longer stays sharp and tappable behind the editor.',
+      'Fixed: deleting an event is reliable now, with a clear two-tap confirmation and a message if something goes wrong.',
+      'The calendar scrolls more smoothly, especially in the 3 Weeks and Month views.',
+    ],
+  },
+  {
     version: 'v1.1.7',
     date: 'Sep 19, 2026',
     notes: [

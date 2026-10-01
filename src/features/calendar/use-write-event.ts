@@ -192,7 +192,25 @@ export function useDeleteEvent() {
 
       return result
     },
-    onSuccess: () => {
+    // Optimistic removal: the event disappears from the calendar instantly.
+    // Rolls back if the delete fails (the form then shows the error).
+    onMutate: async ({ eventId }) => {
+      const queryKey = ['calendar-events', member?.family_id]
+      await queryClient.cancelQueries({ queryKey })
+      const previous = queryClient.getQueryData(queryKey)
+      queryClient.setQueryData(queryKey, (old: unknown) =>
+        Array.isArray(old)
+          ? old.filter((ev: any) => ev.external_event_id !== eventId)
+          : old
+      )
+      return { previous }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(['calendar-events', member?.family_id], context.previous)
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['calendar-events', member?.family_id] })
     },
   })

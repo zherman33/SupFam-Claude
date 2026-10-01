@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { queryClient } from '@/lib/query-client'
 import { AdvancedSettings } from '@/features/settings/advanced-settings'
@@ -53,16 +53,18 @@ export function Dashboard() {
   const familyName = member?.families?.name ?? 'Your Family'
   const inviteCode = member?.families?.invite_code
 
-  // Filter events to only include those from visible calendars
-  const visibleEvents = events?.filter(ev => {
+  // Filter events to only include those from visible calendars.
+  // Memoized: CalendarView's memoized week/day cells rely on a stable array
+  // identity — re-filtering every render would defeat that memoization.
+  const visibleEvents = useMemo(() => events?.filter(ev => {
     if (!calendars) return true
     if (!ev.source_calendar_id) return true
-    const cal = calendars.find(c => 
+    const cal = calendars.find(c =>
       c.calendar_id === ev.source_calendar_id &&
       (!ev.created_by || c.family_member_id === ev.created_by)
     )
     return cal ? cal.is_visible : true
-  })
+  }), [events, calendars])
 
   // Apply device/ambient display settings on mount and when returning to focus
   useEffect(() => {

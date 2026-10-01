@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useAddIcsCalendar, useSyncCalendars } from './use-calendar'
 
 interface AddCalendarModalProps {
@@ -68,7 +69,9 @@ export function AddCalendarModal({ onClose }: AddCalendarModalProps) {
     }
   }
 
-  return (
+  // Portaled so the modal always paints above in-app stacking contexts
+  // (e.g. the calendar header) regardless of where it is rendered.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-brown-900/35 backdrop-blur-sm" onClick={onClose} />
@@ -226,6 +229,7 @@ export function AddCalendarModal({ onClose }: AddCalendarModalProps) {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

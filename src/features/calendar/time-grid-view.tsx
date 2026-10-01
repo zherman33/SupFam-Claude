@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo, useCallback } from 'react'
+import { useEffect, useRef, useMemo, useCallback, memo } from 'react'
 import { format, isToday, parseISO } from 'date-fns'
 import { useConnectedCalendars, type CalendarEvent } from './use-calendar'
 import { useEventColorRules, applyColorRules } from '@/features/settings/use-event-color-rules'
@@ -26,7 +26,9 @@ function formatTimeRange(startStr: string, endStr: string | null): string {
   return `${formatTimeShort(startStr)}\u2013${formatTimeShort(endStr)}`
 }
 
-export function TimeGridView({
+// Memoized: the parent re-renders on scroll state changes, but the week pager
+// only needs to re-render when its inputs (weeks, events, active week) change.
+export const TimeGridView = memo(function TimeGridView({
   weeks,
   activeWeekIdx = 0,
   onWeekChange,
@@ -446,7 +448,7 @@ export function TimeGridView({
       </div>
     </div>
   )
-}
+})
 
 function isBirthdayEvent(ev: CalendarEvent): boolean {
   return (

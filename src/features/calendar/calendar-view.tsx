@@ -6,7 +6,7 @@ import {
   isToday,
   parseISO,
 } from 'date-fns'
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react'
 import type { Task } from '@/features/tasks/use-tasks'
 import {
   useConnectedCalendars,
@@ -16,7 +16,7 @@ import {
   type ConnectedCalendar,
   type EventDateBounds,
 } from './use-calendar'
-import { useEventColorRules, applyColorRules } from '@/features/settings/use-event-color-rules'
+import { useEventColorRules, applyColorRules, type EventColorRule } from '@/features/settings/use-event-color-rules'
 import { EventForm } from './event-form'
 import { TimeGridView } from './time-grid-view'
 
@@ -75,12 +75,15 @@ export function CalendarView({
   const { data: connectedCalendars } = useConnectedCalendars()
   const toggleVisibility = useToggleCalendarVisibility()
 
-  const calColorMap = new Map<string, string>()
-  for (const c of connectedCalendars ?? []) {
-    if (c.calendar_id && c.color) {
-      calColorMap.set(c.calendar_id, c.color)
+  const calColorMap = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const c of connectedCalendars ?? []) {
+      if (c.calendar_id && c.color) {
+        m.set(c.calendar_id, c.color)
+      }
     }
-  }
+    return m
+  }, [connectedCalendars])
   const quickToggleCalendars = (connectedCalendars ?? []).filter(c => c.is_quick_toggle)
 
   // Event form state
@@ -241,7 +244,17 @@ export function CalendarView({
       topDayIdxRef.current = newDayIdx
       setTopDayIdx(newDayIdx)
     }
-  }, [])
+  }, [setTopDayIdx])
+
+  // Stable callbacks for memoized week/day cells — creating these inline would
+  // defeat memoization and re-render all 420 day cells on every scroll tick.
+  const handleEventClick = useCallback((ev: CalendarEvent) => setEditEvent(ev), [setEditEvent])
+  const handleDayClick = useCallback((day: Date) => setFormDate(day), [setFormDate])
+  const handleWeekChange = useCallback((wi: number) => {
+    const targetDay = wi * 7
+    setTopDayIdx(targetDay)
+    topDayIdxRef.current = targetDay
+  }, [setTopDayIdx])
 
   const monthLabel = useMemo(() => {
     if (mode === 'week') {
@@ -419,14 +432,10 @@ export function CalendarView({
           <TimeGridView
             weeks={allWeeks}
             activeWeekIdx={Math.floor(topDayIdx / 7)}
-            onWeekChange={(wi) => {
-              const targetDay = wi * 7
-              setTopDayIdx(targetDay)
-              topDayIdxRef.current = targetDay
-            }}
+            onWeekChange={handleWeekChange}
             events={events}
-            onEventClick={(ev) => setEditEvent(ev)}
-            onCellClick={(day) => setFormDate(day)}
+            onEventClick={handleEventClick}
+            onCellClick={handleDayClick}
           />
         </div>
       ) : (
@@ -468,7 +477,6 @@ export function CalendarView({
                 overflowX: 'hidden',
                 overflowAnchor: 'none',
                 overscrollBehavior: 'contain',
-                willChange: 'transform',
               }}
               onScroll={handleScroll}
             >
@@ -480,199 +488,22 @@ export function CalendarView({
                   gridTemplateRows: `repeat(${TOTAL_WEEKS}, minmax(0, 1fr))`,
                 }}
               >
-                {allWeeks.map((week, wi) => {
-                  const isSnapPoint = snapRows.has(wi)
-                  const weekDateKeys = week.map(d => format(d, 'yyyy-MM-dd'))
-                  const weekBanners: CalendarEvent[] = []
-                  const seenBannerIds = new Set<string>()
-                  for (const dk of weekDateKeys) {
-                    const evs = eventsByDate.get(dk) ?? []
-                    for (const ev of evs) {
-                      const bounds = eventBoundsMap.get(ev.id)
-                      if (!isAmbientCalendarEvent(ev) && (ev.all_day || bounds?.isMultiDay)) {
-                        if (!seenBannerIds.has(ev.id)) {
-                          seenBannerIds.add(ev.id)
-                          weekBanners.push(ev)
-                        }
-                      }
-                    }
-                  }
-                  weekBanners.sort((a, b) => {
-                    const boundsA = eventBoundsMap.get(a.id)!
-                    const boundsB = eventBoundsMap.get(b.id)!
-                    const startDiff = boundsA.firstDay.localeCompare(boundsB.firstDay)
-                    if (startDiff !== 0) return startDiff
-                    const durA = boundsA.dates.length
-                    const durB = boundsB.dates.length
-                    if (durA !== durB) return durB - durA
-                    return a.start_at.localeCompare(b.start_at)
-                  })
-                  const slotOccupancies: boolean[][] = []
-                  const bannerSlotMap = new Map<string, number>()
-                  for (const ev of weekBanners) {
-                    const bounds = eventBoundsMap.get(ev.id)!
-                    let foundSlot = -1
-                    for (let s = 0; s < slotOccupancies.length; s++) {
-                      let conflict = false
-                      for (let d = 0; d < 7; d++) {
-                        if (bounds.dates.includes(weekDateKeys[d]) && slotOccupancies[s][d]) {
-                          conflict = true
-                          break
-                        }
-                      }
-                      if (!conflict) {
-                        foundSlot = s
-                        break
-                      }
-                    }
-                    if (foundSlot === -1) {
-                      foundSlot = slotOccupancies.length
-                      slotOccupancies.push(Array(7).fill(false))
-                    }
-                    for (let d = 0; d < 7; d++) {
-                      if (bounds.dates.includes(weekDateKeys[d])) {
-                        slotOccupancies[foundSlot][d] = true
-                      }
-                    }
-                    bannerSlotMap.set(ev.id, foundSlot)
-                  }
-                  const totalBannerSlots = slotOccupancies.length
-
-                  return (
-                    <div
-                      key={wi}
-                      className="grid grid-cols-7 border-b border-sand-100 last:border-0 min-h-0"
-                      style={isSnapPoint ? { scrollSnapAlign: 'start' } : undefined}
-                    >
-                      {week.map((day, dayIdx) => {
-                        const key = format(day, 'yyyy-MM-dd')
-                        const dayEvents = eventsByDate.get(key) ?? []
-                        const dayTasks = tasksByDate.get(key) ?? []
-                        const isCurrentDay = isToday(day)
-                        const isWeekend = day.getDay() === 0 || day.getDay() === 6
-
-                        const dayBannerSlots: (CalendarEvent | null)[] = Array(totalBannerSlots).fill(null)
-                        for (const ev of dayEvents) {
-                          const bounds = eventBoundsMap.get(ev.id)
-                          if (!isAmbientCalendarEvent(ev) && (ev.all_day || bounds?.isMultiDay)) {
-                            const slot = bannerSlotMap.get(ev.id)
-                            if (slot !== undefined) {
-                              dayBannerSlots[slot] = ev
-                            }
-                          }
-                        }
-
-                        const singleDayEvents = dayEvents.filter(ev => {
-                          const bounds = eventBoundsMap.get(ev.id)
-                          return !isAmbientCalendarEvent(ev) && !ev.all_day && !bounds?.isMultiDay
-                        })
-                        type Pill = { type: 'event'; ev: CalendarEvent } | { type: 'task'; task: Task }
-                        const personalPills: Pill[] = [
-                          ...singleDayEvents.map(ev => ({ type: 'event' as const, ev })),
-                          ...dayTasks.map(task => ({ type: 'task' as const, task })),
-                        ]
-                        const ambientPills: { type: 'event'; ev: CalendarEvent }[] = dayEvents
-                          .filter(ev => isAmbientCalendarEvent(ev))
-                          .map(ev => ({ type: 'event' as const, ev }))
-
-                        const lastOccupiedSlot = dayBannerSlots.map(ev => ev !== null).lastIndexOf(true)
-                        const renderedBannerSlots = dayBannerSlots.slice(0, lastOccupiedSlot + 1)
-
-                        return (
-                          <div
-                            key={key}
-                            className={`relative flex flex-col border-r border-sand-100 last:border-r-0 overflow-hidden min-h-0 cursor-pointer
-                              ${isWeekend && !isCurrentDay ? 'bg-[#faf8f5]' : 'bg-white'}
-                              ${isCurrentDay ? 'bg-terracotta-500/[0.09] ring-1 ring-inset ring-terracotta-500/40' : ''}
-                            `}
-                            onClick={() => setFormDate(day)}
-                          >
-                            <div className={`flex flex-col h-full ${mode === 'month' ? 'p-1.5 gap-px' : 'p-2 gap-1'}`}>
-                              <div className="flex-shrink-0 mb-0.5 flex items-center gap-1.5">
-                                {isCurrentDay ? (
-                                  <span className={`inline-flex items-center justify-center rounded-full bg-terracotta-500 text-white font-bold leading-none shadow-sm ${
-                                    mode === 'month' ? 'h-6 w-6 text-xs' : 'h-8 w-8 text-sm'
-                                  }`}>
-                                    {format(day, 'd')}
-                                  </span>
-                                ) : (
-                                  <span className={`
-                                    inline-flex items-center justify-center rounded-full font-bold leading-none
-                                    ${mode === 'month' ? 'h-[1.125rem] w-[1.125rem] text-[0.625rem]' : 'h-[1.375rem] w-[1.375rem] text-[0.75rem]'}
-                                    ${isWeekend ? 'text-brown-700/30' : 'text-brown-700/60'}
-                                  `}>
-                                    {format(day, 'd')}
-                                  </span>
-                                )}
-                                {isCurrentDay && mode !== 'month' && (
-                                  <span className="rounded-full bg-terracotta-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-terracotta-600">
-                                    Today
-                                  </span>
-                                )}
-                              </div>
-                              <div className={`flex flex-col flex-1 min-h-0 ${mode === 'month' ? 'gap-px' : 'gap-1'}`}>
-                                {renderedBannerSlots.map((ev, slotIdx) => {
-                                  if (!ev) {
-                                    return <BannerSpacer key={`spacer-${slotIdx}-${key}`} mode={mode} />
-                                  }
-                                  const bounds = eventBoundsMap.get(ev.id)!
-                                  const isRealStart = key === bounds.firstDay
-                                  const isRealEnd = key === bounds.lastDay
-                                  const isRowStart = dayIdx === 0
-                                  const showTitle = isRealStart || isRowStart
-                                  return (
-                                    <EventPill
-                                      key={`${ev.id}-${key}`}
-                                      ev={ev}
-                                      mode={mode}
-                                      colorRules={colorRules}
-                                      calColor={calColorMap.get(ev.source_calendar_id)}
-                                      onClick={e => { e.stopPropagation(); setEditEvent(ev) }}
-                                      isBanner={true}
-                                      isStart={isRealStart}
-                                      isEnd={isRealEnd}
-                                      showTitle={showTitle}
-                                    />
-                                  )
-                                })}
-                                {personalPills.map((pill) => pill.type === 'event'
-                                  ? <EventPill
-                                      key={`${pill.ev.id}-${key}`}
-                                      ev={pill.ev}
-                                      mode={mode}
-                                      colorRules={colorRules}
-                                      calColor={calColorMap.get(pill.ev.source_calendar_id)}
-                                      onClick={e => { e.stopPropagation(); setEditEvent(pill.ev) }}
-                                    />
-                                  : <TaskPill
-                                      key={pill.task.id}
-                                      task={pill.task}
-                                      mode={mode}
-                                      onClick={onSelectTask ? (e) => { e.stopPropagation(); onSelectTask(pill.task); } : undefined}
-                                    />
-                                )}
-                                {ambientPills.length > 0 && (
-                                  <>
-                                    {ambientPills.map((pill) => (
-                                      <EventPill
-                                        key={`${pill.ev.id}-${key}`}
-                                        ev={pill.ev}
-                                        mode={mode}
-                                        colorRules={colorRules}
-                                        calColor={calColorMap.get(pill.ev.source_calendar_id)}
-                                        onClick={e => { e.stopPropagation(); setEditEvent(pill.ev) }}
-                                      />
-                                    ))}
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )
-                })}
+                {allWeeks.map((week, wi) => (
+                  <WeekRow
+                    key={wi}
+                    week={week}
+                    isSnapPoint={snapRows.has(wi)}
+                    mode={mode}
+                    eventsByDate={eventsByDate}
+                    eventBoundsMap={eventBoundsMap}
+                    tasksByDate={tasksByDate}
+                    colorRules={colorRules}
+                    calColorMap={calColorMap}
+                    onEventClick={handleEventClick}
+                    onDayClick={handleDayClick}
+                    onSelectTask={onSelectTask}
+                  />
+                ))}
               </div>
             </div>
           </div>
@@ -682,6 +513,292 @@ export function CalendarView({
     </>
   )
 }
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+// ── Memoized month/3-week grid ──────────────────────────────────────────────
+// The grid renders 60 weeks / 420 day cells. Scroll position updates state on
+// every scroll tick, so rows and cells are memoized: a scroll-driven re-render
+// of CalendarView must not re-render rows whose inputs haven't changed.
+
+const EMPTY_EVENTS: CalendarEvent[] = []
+const EMPTY_TASKS: Task[] = []
+
+type Pill = { type: 'event'; ev: CalendarEvent } | { type: 'task'; task: Task }
+
+interface WeekRowProps {
+  week: Date[]
+  isSnapPoint: boolean
+  mode: CalendarMode
+  eventsByDate: Map<string, CalendarEvent[]>
+  eventBoundsMap: Map<string, EventDateBounds>
+  tasksByDate: Map<string, Task[]>
+  colorRules: EventColorRule[] | undefined
+  calColorMap: Map<string, string>
+  onEventClick: (ev: CalendarEvent) => void
+  onDayClick: (day: Date) => void
+  onSelectTask?: (task: Task) => void
+}
+
+const WeekRow = memo(function WeekRow({
+  week,
+  isSnapPoint,
+  mode,
+  eventsByDate,
+  eventBoundsMap,
+  tasksByDate,
+  colorRules,
+  calColorMap,
+  onEventClick,
+  onDayClick,
+  onSelectTask,
+}: WeekRowProps) {
+  const weekDateKeys = week.map(d => format(d, 'yyyy-MM-dd'))
+
+  // Multi-day / all-day banners get dedicated slots spanning the week so
+  // multi-day events line up across columns.
+  const weekBanners: CalendarEvent[] = []
+  const seenBannerIds = new Set<string>()
+  for (const dk of weekDateKeys) {
+    const evs = eventsByDate.get(dk) ?? EMPTY_EVENTS
+    for (const ev of evs) {
+      const bounds = eventBoundsMap.get(ev.id)
+      if (!isAmbientCalendarEvent(ev) && (ev.all_day || bounds?.isMultiDay)) {
+        if (!seenBannerIds.has(ev.id)) {
+          seenBannerIds.add(ev.id)
+          weekBanners.push(ev)
+        }
+      }
+    }
+  }
+  weekBanners.sort((a, b) => {
+    const boundsA = eventBoundsMap.get(a.id)!
+    const boundsB = eventBoundsMap.get(b.id)!
+    const startDiff = boundsA.firstDay.localeCompare(boundsB.firstDay)
+    if (startDiff !== 0) return startDiff
+    const durA = boundsA.dates.length
+    const durB = boundsB.dates.length
+    if (durA !== durB) return durB - durA
+    return a.start_at.localeCompare(b.start_at)
+  })
+
+  const slotOccupancies: boolean[][] = []
+  const bannerSlotMap = new Map<string, number>()
+  for (const ev of weekBanners) {
+    const bounds = eventBoundsMap.get(ev.id)!
+    let foundSlot = -1
+    for (let s = 0; s < slotOccupancies.length; s++) {
+      let conflict = false
+      for (let d = 0; d < 7; d++) {
+        if (bounds.dates.includes(weekDateKeys[d]) && slotOccupancies[s][d]) {
+          conflict = true
+          break
+        }
+      }
+      if (!conflict) {
+        foundSlot = s
+        break
+      }
+    }
+    if (foundSlot === -1) {
+      foundSlot = slotOccupancies.length
+      slotOccupancies.push(Array(7).fill(false))
+    }
+    for (let d = 0; d < 7; d++) {
+      if (bounds.dates.includes(weekDateKeys[d])) {
+        slotOccupancies[foundSlot][d] = true
+      }
+    }
+    bannerSlotMap.set(ev.id, foundSlot)
+  }
+  const totalBannerSlots = slotOccupancies.length
+
+  return (
+    <div
+      className="grid grid-cols-7 border-b border-sand-100 last:border-0 min-h-0"
+      style={isSnapPoint ? { scrollSnapAlign: 'start' } : undefined}
+    >
+      {week.map((day, dayIdx) => (
+        <DayCell
+          key={weekDateKeys[dayIdx]}
+          day={day}
+          dateKey={weekDateKeys[dayIdx]}
+          dayIdx={dayIdx}
+          mode={mode}
+          isCurrentDay={isToday(day)}
+          isWeekend={day.getDay() === 0 || day.getDay() === 6}
+          dayEvents={eventsByDate.get(weekDateKeys[dayIdx]) ?? EMPTY_EVENTS}
+          dayTasks={tasksByDate.get(weekDateKeys[dayIdx]) ?? EMPTY_TASKS}
+          bannerSlotMap={bannerSlotMap}
+          totalBannerSlots={totalBannerSlots}
+          eventBoundsMap={eventBoundsMap}
+          colorRules={colorRules}
+          calColorMap={calColorMap}
+          onEventClick={onEventClick}
+          onDayClick={onDayClick}
+          onSelectTask={onSelectTask}
+        />
+      ))}
+    </div>
+  )
+})
+
+interface DayCellProps {
+  day: Date
+  dateKey: string
+  dayIdx: number
+  mode: CalendarMode
+  isCurrentDay: boolean
+  isWeekend: boolean
+  dayEvents: CalendarEvent[]
+  dayTasks: Task[]
+  bannerSlotMap: Map<string, number>
+  totalBannerSlots: number
+  eventBoundsMap: Map<string, EventDateBounds>
+  colorRules: EventColorRule[] | undefined
+  calColorMap: Map<string, string>
+  onEventClick: (ev: CalendarEvent) => void
+  onDayClick: (day: Date) => void
+  onSelectTask?: (task: Task) => void
+}
+
+const DayCell = memo(function DayCell({
+  day,
+  dateKey: key,
+  dayIdx,
+  mode,
+  isCurrentDay,
+  isWeekend,
+  dayEvents,
+  dayTasks,
+  bannerSlotMap,
+  totalBannerSlots,
+  eventBoundsMap,
+  colorRules,
+  calColorMap,
+  onEventClick,
+  onDayClick,
+  onSelectTask,
+}: DayCellProps) {
+  const handleClick = useCallback(() => onDayClick(day), [onDayClick, day])
+
+  const dayBannerSlots: (CalendarEvent | null)[] = Array(totalBannerSlots).fill(null)
+  for (const ev of dayEvents) {
+    const bounds = eventBoundsMap.get(ev.id)
+    if (!isAmbientCalendarEvent(ev) && (ev.all_day || bounds?.isMultiDay)) {
+      const slot = bannerSlotMap.get(ev.id)
+      if (slot !== undefined) {
+        dayBannerSlots[slot] = ev
+      }
+    }
+  }
+
+  const singleDayEvents = dayEvents.filter(ev => {
+    const bounds = eventBoundsMap.get(ev.id)
+    return !isAmbientCalendarEvent(ev) && !ev.all_day && !bounds?.isMultiDay
+  })
+  const personalPills: Pill[] = [
+    ...singleDayEvents.map(ev => ({ type: 'event' as const, ev })),
+    ...dayTasks.map(task => ({ type: 'task' as const, task })),
+  ]
+  const ambientPills: { type: 'event'; ev: CalendarEvent }[] = dayEvents
+    .filter(ev => isAmbientCalendarEvent(ev))
+    .map(ev => ({ type: 'event' as const, ev }))
+
+  const lastOccupiedSlot = dayBannerSlots.map(ev => ev !== null).lastIndexOf(true)
+  const renderedBannerSlots = dayBannerSlots.slice(0, lastOccupiedSlot + 1)
+
+  return (
+    <div
+      className={`relative flex flex-col border-r border-sand-100 last:border-r-0 overflow-hidden min-h-0 cursor-pointer
+        ${isWeekend && !isCurrentDay ? 'bg-[#faf8f5]' : 'bg-white'}
+        ${isCurrentDay ? 'bg-terracotta-500/[0.09] ring-1 ring-inset ring-terracotta-500/40' : ''}
+      `}
+      onClick={handleClick}
+    >
+      <div className={`flex flex-col h-full ${mode === 'month' ? 'p-1.5 gap-px' : 'p-2 gap-1'}`}>
+        <div className="flex-shrink-0 mb-0.5 flex items-center gap-1.5">
+          {isCurrentDay ? (
+            <span className={`inline-flex items-center justify-center rounded-full bg-terracotta-500 text-white font-bold leading-none shadow-sm ${
+              mode === 'month' ? 'h-6 w-6 text-xs' : 'h-8 w-8 text-sm'
+            }`}>
+              {format(day, 'd')}
+            </span>
+          ) : (
+            <span className={`
+              inline-flex items-center justify-center rounded-full font-bold leading-none
+              ${mode === 'month' ? 'h-[1.125rem] w-[1.125rem] text-[0.625rem]' : 'h-[1.375rem] w-[1.375rem] text-[0.75rem]'}
+              ${isWeekend ? 'text-brown-700/30' : 'text-brown-700/60'}
+            `}>
+              {format(day, 'd')}
+            </span>
+          )}
+          {isCurrentDay && mode !== 'month' && (
+            <span className="rounded-full bg-terracotta-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-terracotta-600">
+              Today
+            </span>
+          )}
+        </div>
+        <div className={`flex flex-col flex-1 min-h-0 ${mode === 'month' ? 'gap-px' : 'gap-1'}`}>
+          {renderedBannerSlots.map((ev, slotIdx) => {
+            if (!ev) {
+              return <MemoBannerSpacer key={`spacer-${slotIdx}-${key}`} mode={mode} />
+            }
+            const bounds = eventBoundsMap.get(ev.id)!
+            const isRealStart = key === bounds.firstDay
+            const isRealEnd = key === bounds.lastDay
+            const isRowStart = dayIdx === 0
+            const showTitle = isRealStart || isRowStart
+            return (
+              <MemoEventPill
+                key={`${ev.id}-${key}`}
+                ev={ev}
+                mode={mode}
+                colorRules={colorRules}
+                calColor={calColorMap.get(ev.source_calendar_id)}
+                onSelect={onEventClick}
+                isBanner={true}
+                isStart={isRealStart}
+                isEnd={isRealEnd}
+                showTitle={showTitle}
+              />
+            )
+          })}
+          {personalPills.map((pill) => pill.type === 'event'
+            ? <MemoEventPill
+                key={`${pill.ev.id}-${key}`}
+                ev={pill.ev}
+                mode={mode}
+                colorRules={colorRules}
+                calColor={calColorMap.get(pill.ev.source_calendar_id)}
+                onSelect={onEventClick}
+              />
+            : <MemoTaskPill
+                key={pill.task.id}
+                task={pill.task}
+                mode={mode}
+                onSelect={onSelectTask}
+              />
+          )}
+          {ambientPills.length > 0 && (
+            <>
+              {ambientPills.map((pill) => (
+                <MemoEventPill
+                  key={`${pill.ev.id}-${key}`}
+                  ev={pill.ev}
+                  mode={mode}
+                  colorRules={colorRules}
+                  calColor={calColorMap.get(pill.ev.source_calendar_id)}
+                  onSelect={onEventClick}
+                />
+              ))}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+})
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -775,7 +892,7 @@ function EventPill({
   mode = 'month',
   colorRules,
   calColor,
-  onClick,
+  onSelect,
   isBanner = false,
   isStart = true,
   isEnd = true,
@@ -783,9 +900,9 @@ function EventPill({
 }: {
   ev: CalendarEvent
   mode?: CalendarMode
-  colorRules?: import('@/features/settings/use-event-color-rules').EventColorRule[]
+  colorRules?: EventColorRule[]
   calColor?: string
-  onClick?: (e: React.MouseEvent) => void
+  onSelect?: (ev: CalendarEvent) => void
   isBanner?: boolean
   isStart?: boolean
   isEnd?: boolean
@@ -834,7 +951,7 @@ function EventPill({
         marginRight: negMarginRight,
       }}
       title={ev.title}
-      onClick={onClick}
+      onClick={e => { e.stopPropagation(); onSelect?.(ev) }}
     >
       {(!isBanner || isStart) && (
         <div className={`${barWidth} flex-shrink-0 ${isStart ? 'rounded-l' : ''}`} style={{ backgroundColor: color }} />
@@ -878,11 +995,11 @@ function BannerSpacer({ mode = 'month' }: { mode?: CalendarMode }) {
 function TaskPill({
   task,
   mode = 'month',
-  onClick,
+  onSelect,
 }: {
   task: Task
   mode?: CalendarMode
-  onClick?: (e: React.MouseEvent) => void
+  onSelect?: (task: Task) => void
 }) {
   const color = task.assigned_member?.avatar_color ?? '#C4714F'
   const barWidth = mode === 'month' ? 'w-[0.1875rem]' : mode === '3week' ? 'w-1' : 'w-1.5'
@@ -896,9 +1013,9 @@ function TaskPill({
 
   return (
     <div
-      onClick={onClick}
+      onClick={onSelect ? e => { e.stopPropagation(); onSelect(task) } : undefined}
       className={`flex items-stretch rounded overflow-hidden flex-shrink-0 ${
-        onClick ? 'cursor-pointer hover:brightness-95 active:brightness-90 transition-[filter]' : ''
+        onSelect ? 'cursor-pointer hover:brightness-95 active:brightness-90 transition-[filter]' : ''
       }`}
       style={{ backgroundColor: `${color}18` }}
       title={task.title}
@@ -913,3 +1030,7 @@ function TaskPill({
     </div>
   )
 }
+
+const MemoEventPill = memo(EventPill)
+const MemoBannerSpacer = memo(BannerSpacer)
+const MemoTaskPill = memo(TaskPill)

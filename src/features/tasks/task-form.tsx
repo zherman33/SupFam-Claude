@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { format, addDays } from 'date-fns'
 import { useFamilyMembers } from '@/features/auth/use-family-member'
 import { useUpdateTask, useDeleteTask, type Task } from './use-tasks'
@@ -20,6 +21,10 @@ export function TaskForm({ task, onClose }: TaskFormProps) {
   const [isComplete, setIsComplete] = useState(task.is_complete ?? false)
 
   const isPending = updateTask.isPending || deleteTask.isPending
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  // Two-tap delete confirmation — native confirm() is unreliable in embedded
+  // webviews and gives no feedback when the delete fails.
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -37,9 +42,19 @@ export function TaskForm({ task, onClose }: TaskFormProps) {
   }
 
   const handleDelete = async () => {
-    if (!confirm('Delete this task?')) return
-    await deleteTask.mutateAsync(task.id)
-    onClose()
+    if (!confirmingDelete) {
+      setConfirmingDelete(true)
+      return
+    }
+    setConfirmingDelete(false)
+    setDeleteError(null)
+    try {
+      await deleteTask.mutateAsync(task.id)
+      onClose()
+    } catch (err: any) {
+      console.error('Error deleting task:', err)
+      setDeleteError(err?.message || "Hmm, that didn't work — try again?")
+    }
   }
 
   const setQuickDate = (daysToAdd: number) => {
@@ -47,7 +62,9 @@ export function TaskForm({ task, onClose }: TaskFormProps) {
     setDueDate(format(target, 'yyyy-MM-dd'))
   }
 
-  return (
+  // Portaled so the modal always paints above in-app stacking contexts
+  // (e.g. the calendar header) regardless of where it is rendered.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-brown-900/30 backdrop-blur-sm" onClick={onClose} />
@@ -62,9 +79,17 @@ export function TaskForm({ task, onClose }: TaskFormProps) {
               type="button"
               onClick={handleDelete}
               disabled={isPending}
-              className="rounded-xl px-3 py-1.5 text-xs font-semibold text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
+              className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40 ${
+                confirmingDelete
+                  ? 'bg-red-500 text-white hover:bg-red-600'
+                  : 'text-red-500 hover:bg-red-50'
+              }`}
             >
-              Delete
+              {deleteTask.isPending
+                ? 'Deleting…'
+                : confirmingDelete
+                  ? 'Tap again to confirm'
+                  : 'Delete'}
             </button>
             <button
               type="button"
@@ -230,6 +255,11 @@ export function TaskForm({ task, onClose }: TaskFormProps) {
 
           {/* Submit footer */}
           <div className="px-5 pb-6 pt-3 flex-shrink-0 border-t border-sand-100 bg-white">
+            {deleteError && (
+              <p className="mb-2 text-xs font-semibold text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2">
+                {deleteError}
+              </p>
+            )}
             <button
               type="submit"
               disabled={!title.trim() || isPending}
@@ -240,6 +270,7 @@ export function TaskForm({ task, onClose }: TaskFormProps) {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

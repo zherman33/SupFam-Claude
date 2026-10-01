@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import {
   format,
   parseISO,
@@ -225,6 +226,22 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
     }
   }
 
+  // The calendar the event currently lives on (edit mode). ICS subscriptions are
+  // read-only — the event can't be saved back or deleted through Google.
+  const sourceCal = isEdit && event
+    ? calendars?.find(c =>
+        c.calendar_id === event.source_calendar_id &&
+        c.family_member_id === event.created_by
+      )
+    : undefined
+  const sourceIsReadOnly = !!sourceCal && isReadOnlyCalendar(sourceCal)
+  const selectedCal = calendars?.find(c => c.id === selectedCalendarId)
+
+  // True when editing and the user picked a different calendar than the event
+  // currently lives on — saving performs a move (create on new + delete old).
+  const isMoving = isEdit && !!sourceCal && !sourceIsReadOnly &&
+    !!selectedCalendarId && selectedCalendarId !== sourceCal.id
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim() || !selectedCalendarId || !selectedMemberId) return
@@ -262,16 +279,40 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
     }
   }
 
+  // Two-tap delete confirmation (works everywhere — native confirm() is
+  // unreliable in embedded webviews and gives no feedback on failure).
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+
   const handleDelete = async () => {
-    if (!event?.external_event_id || !selectedCalendarId || !selectedMemberId) return
-    if (!confirm('Delete this event?')) return
-    const selectedCal = calendars?.find(c => c.id === selectedCalendarId)
-    await deleteEvent.mutateAsync({
-      eventId: event.external_event_id,
-      calendarId: selectedCal?.calendar_id ?? '',
-      familyMemberId: selectedMemberId,
-    })
-    onClose()
+    if (!event?.external_event_id) {
+      setError("This event can't be deleted from here — it has no calendar ID.")
+      return
+    }
+    if (!confirmingDelete) {
+      setConfirmingDelete(true)
+      return
+    }
+    setConfirmingDelete(false)
+    // Delete from the calendar the event actually lives on (the source),
+    // not whichever calendar is picked in the dropdown — the event may have
+    // been moved since the form opened.
+    const targetCal = sourceCal ?? selectedCal
+    if (!targetCal) {
+      setError("Couldn't find the calendar this event lives on — try again.")
+      return
+    }
+    setError(null)
+    try {
+      await deleteEvent.mutateAsync({
+        eventId: event.external_event_id,
+        calendarId: targetCal.calendar_id,
+        familyMemberId: targetCal.family_member_id,
+      })
+      onClose()
+    } catch (err: any) {
+      console.error('Error deleting event:', err)
+      setError(err?.message || "Hmm, that didn't work — try again?")
+    }
   }
 
   // Writable calendars grouped by owner for the calendar picker.
@@ -298,26 +339,14 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
   const isAmbiguousName = (cal: { calendar_name: string | null; calendar_id: string }) =>
     (nameCounts.get((cal.calendar_name ?? cal.calendar_id).toLowerCase()) ?? 0) > 1
 
-  const selectedCal = calendars?.find(c => c.id === selectedCalendarId)
   const ownerNameOf = (cal: { owner?: { display_name: string } | null }) =>
     (cal.owner as any)?.display_name ?? 'Unknown'
 
-  // The calendar the event currently lives on (edit mode). ICS subscriptions are
-  // read-only — the event can't be saved back or deleted through Google.
-  const sourceCal = isEdit && event
-    ? calendars?.find(c =>
-        c.calendar_id === event.source_calendar_id &&
-        c.family_member_id === event.created_by
-      )
-    : undefined
-  const sourceIsReadOnly = !!sourceCal && isReadOnlyCalendar(sourceCal)
-
-  // True when editing and the user picked a different calendar than the event
-  // currently lives on — saving performs a move (create on new + delete old).
-  const isMoving = isEdit && !!sourceCal && !sourceIsReadOnly &&
-    !!selectedCalendarId && selectedCalendarId !== sourceCal.id
-
-  return (
+  // Rendered in a portal so the modal (and its backdrop) always paints above
+  // in-app stacking contexts like the calendar header — previously the header
+  // (z-50, later in DOM) rendered on top of the modal, leaving the view
+  // switcher sharp & clickable over the blurred backdrop.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-brown-900/70 backdrop-blur-sm" onClick={onClose}/>
@@ -332,11 +361,20 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
           <div className="flex items-center gap-2">
             {isEdit && !sourceIsReadOnly && (
               <button
+                type="button"
                 onClick={handleDelete}
                 disabled={isPending}
-                className="rounded-xl px-3 py-1.5 text-xs font-semibold text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
+                className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40 ${
+                  confirmingDelete
+                    ? 'bg-red-500 text-white hover:bg-red-600'
+                    : 'text-red-500 hover:bg-red-50'
+                }`}
               >
-                Delete
+                {deleteEvent.isPending
+                  ? 'Deleting…'
+                  : confirmingDelete
+                    ? 'Tap again to confirm'
+                    : 'Delete'}
               </button>
             )}
             <button
@@ -604,7 +642,8 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
