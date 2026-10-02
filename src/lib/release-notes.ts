@@ -23,8 +23,12 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     version: 'v1.1.9',
     date: 'Oct 1, 2026',
-    headline: 'Adding an event got simpler.',
+    headline: 'Talk dinner through with the new dinner board.',
     notes: [
+      'The dinner board got a big upgrade: tap any day and talk dinner through out loud — it opens with 3 ideas from your family’s own history.',
+      '“Plan the week” talks through the whole week in one conversation and puts dinners on the board for you.',
+      'Rate dinners with a thumbs up or down, and tell it how your family eats — recommendations get smarter over time.',
+      'New Dinner AI setting: use Sup Fam’s cloud AI or point it at your own home AI server. Per device, your call.',
       'Adding an event is simpler: one date with start and end times by default — multi-day is a tap away when you need it.',
       'Opening an event now dims the whole screen properly.',
       'Deleting an event is reliable, with a clear message if something goes wrong.',

@@ -38,8 +38,9 @@ const PRESET_COLORS = [
 ]
 
 import { BillingSettings } from '@/features/billing/billing-settings'
+import { DinnerAiTab } from './dinner-ai-tab'
 
-type SettingsTab = 'calendars' | 'rules' | 'device' | 'billing'
+type SettingsTab = 'calendars' | 'rules' | 'device' | 'dinner-ai' | 'billing'
 
 export function AdvancedSettings({ onClose }: { onClose: () => void }) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('calendars')
@@ -116,6 +117,17 @@ export function AdvancedSettings({ onClose }: { onClose: () => void }) {
               label="Display & Device"
             />
             <TabButton
+              active={activeTab === 'dinner-ai'}
+              onClick={() => setActiveTab('dinner-ai')}
+              icon={
+                <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  <circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+                </svg>
+              }
+              label="Dinner AI"
+            />
+            <TabButton
               active={activeTab === 'billing'}
               onClick={() => setActiveTab('billing')}
               icon={
@@ -134,6 +146,7 @@ export function AdvancedSettings({ onClose }: { onClose: () => void }) {
           {activeTab === 'calendars' && <ConnectedCalendarsTab />}
           {activeTab === 'rules' && <EventColorRulesTab />}
           {activeTab === 'device' && <DisplayAndDeviceTab />}
+          {activeTab === 'dinner-ai' && <DinnerAiTab />}
           {activeTab === 'billing' && <BillingSettings />}
         </div>
       </div>

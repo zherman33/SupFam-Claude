@@ -555,6 +555,126 @@ export interface Database {
           },
         ]
       }
+      meal_ratings: {
+        Row: {
+          id: string
+          family_id: string
+          family_member_id: string | null
+          meal_title: string
+          rating: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          family_id: string
+          family_member_id?: string | null
+          meal_title: string
+          rating: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          family_id?: string
+          family_member_id?: string | null
+          meal_title?: string
+          rating?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'meal_ratings_family_id_fkey'
+            columns: ['family_id']
+            isOneToOne: false
+            referencedRelation: 'families'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      family_food_prefs: {
+        Row: {
+          family_id: string
+          dietary_restrictions: string[]
+          dislikes: string[]
+          favorites: string[]
+          default_servings: number
+          updated_at: string
+        }
+        Insert: {
+          family_id: string
+          dietary_restrictions?: string[]
+          dislikes?: string[]
+          favorites?: string[]
+          default_servings?: number
+          updated_at?: string
+        }
+        Update: {
+          family_id?: string
+          dietary_restrictions?: string[]
+          dislikes?: string[]
+          favorites?: string[]
+          default_servings?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'family_food_prefs_family_id_fkey'
+            columns: ['family_id']
+            isOneToOne: true
+            referencedRelation: 'families'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      dinner_conversations: {
+        Row: {
+          id: string
+          family_id: string
+          family_member_id: string | null
+          scope: string
+          week_start: string
+          day_index: number | null
+          status: string
+          messages: unknown
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          family_id: string
+          family_member_id?: string | null
+          scope?: string
+          week_start: string
+          day_index?: number | null
+          status?: string
+          messages?: unknown
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          family_id?: string
+          family_member_id?: string | null
+          scope?: string
+          week_start?: string
+          day_index?: number | null
+          status?: string
+          messages?: unknown
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'dinner_conversations_family_id_fkey'
+            columns: ['family_id']
+            isOneToOne: false
+            referencedRelation: 'families'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       notes: {
         Row: {
           id: string
