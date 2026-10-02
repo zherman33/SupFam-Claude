@@ -30,6 +30,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       'Deleting an event is reliable, with a clear message if something goes wrong.',
       'The calendar scrolls more smoothly, especially in the 3 Weeks and Month views.',
       'This What’s new screen got simpler too: one card per day — tap any release for details.',
+      'The “today” marker got a fresh look: one clean spotlight on the current day in every calendar view.',
     ],
   },
   {

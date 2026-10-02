@@ -712,14 +712,14 @@ const DayCell = memo(function DayCell({
     <div
       className={`relative flex flex-col border-r border-sand-100 last:border-r-0 overflow-hidden min-h-0 cursor-pointer
         ${isWeekend && !isCurrentDay ? 'bg-[#faf8f5]' : 'bg-white'}
-        ${isCurrentDay ? 'bg-terracotta-500/[0.09] ring-1 ring-inset ring-terracotta-500/40' : ''}
+        ${isCurrentDay ? (mode === 'month' ? 'bg-terracotta-500/[0.05]' : 'bg-terracotta-500/[0.07]') : ''}
       `}
       onClick={handleClick}
     >
       <div className={`flex flex-col h-full ${mode === 'month' ? 'p-1.5 gap-px' : 'p-2 gap-1'}`}>
         <div className="flex-shrink-0 mb-0.5 flex items-center gap-1.5">
           {isCurrentDay ? (
-            <span className={`inline-flex items-center justify-center rounded-full bg-terracotta-500 text-white font-bold leading-none shadow-sm ${
+            <span className={`inline-flex items-center justify-center rounded-full bg-terracotta-500 text-white font-bold leading-none shadow-md ring-4 ring-terracotta-500/15 ${
               mode === 'month' ? 'h-6 w-6 text-xs' : 'h-8 w-8 text-sm'
             }`}>
               {format(day, 'd')}
@@ -731,11 +731,6 @@ const DayCell = memo(function DayCell({
               ${isWeekend ? 'text-brown-700/30' : 'text-brown-700/60'}
             `}>
               {format(day, 'd')}
-            </span>
-          )}
-          {isCurrentDay && mode !== 'month' && (
-            <span className="rounded-full bg-terracotta-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-terracotta-600">
-              Today
             </span>
           )}
         </div>

@@ -323,21 +323,21 @@ export const TimeGridView = memo(function TimeGridView({
                   key={`day-${key}`}
                   onClick={() => onCellClick?.(day)}
                   className={`flex flex-col h-full relative cursor-pointer min-h-0 ${
-                    isCurrentDay ? 'bg-terracotta-500/[0.015]' : 'bg-white'
+                    isCurrentDay ? 'bg-gradient-to-b from-terracotta-500/[0.07] via-terracotta-500/[0.03] to-transparent' : 'bg-white'
                   }`}
                 >
                   <div
                     className={`text-center py-2 flex flex-col items-center gap-0.5 border-b border-sand-200 flex-shrink-0 ${
-                      isCurrentDay ? 'bg-terracotta-50/60 text-terracotta-500' : 'bg-cream-50/50 text-brown-700/60'
+                      isCurrentDay ? 'bg-terracotta-500/[0.06]' : 'bg-cream-50/50'
                     }`}
                   >
                     <span className={`text-[11px] font-semibold uppercase tracking-wider ${
-                      isCurrentDay ? 'text-terracotta-500' : 'text-brown-700/50'
+                      isCurrentDay ? 'text-terracotta-600' : 'text-brown-700/50'
                     }`}>
                       {format(day, 'EEE')}
                     </span>
                     {isCurrentDay ? (
-                      <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-terracotta-500 text-white text-sm font-bold leading-none shadow-sm">
+                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-terracotta-500 text-white text-sm font-bold leading-none shadow-md ring-4 ring-terracotta-500/15">
                         {format(day, 'd')}
                       </span>
                     ) : (
@@ -345,16 +345,7 @@ export const TimeGridView = memo(function TimeGridView({
                         {format(day, 'd')}
                       </span>
                     )}
-                    {isCurrentDay && (
-                      <span className="rounded-full bg-terracotta-500 px-2 py-px text-[9px] font-bold uppercase tracking-widest text-white">
-                        Today
-                      </span>
-                    )}
                   </div>
-
-                  {isCurrentDay && (
-                    <div className="absolute inset-y-0 inset-x-0 border-x-2 border-terracotta-500/30 bg-terracotta-500/[0.015] pointer-events-none z-10" />
-                  )}
 
                   <div className="flex-1 flex flex-col gap-1.5 p-1.5 overflow-y-auto scrollbar-hide z-20 min-h-0">
                     {birthdayEvents.length > 0 && (
