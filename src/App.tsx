@@ -14,6 +14,7 @@ import { useIsStaff } from '@/features/admin/use-is-staff'
 import { UxDashboard } from '@/features/admin/ux-dashboard'
 
 import { SupportWidget } from '@/features/support/support-widget'
+import { openSettings } from '@/features/settings/settings-events'
 
 export default function App() {
   const { user, loading } = useAuth()
@@ -147,12 +148,17 @@ export default function App() {
   )
 }
 
-/** Gentle nudge when the last payment failed — the app keeps working. */
+/** Gentle nudge when the last payment failed — the app keeps working.
+ *  Tapping jumps straight to Settings → Billing. */
 function PaymentBanner() {
   return (
-    <div className="bg-amber-100 px-4 py-2 text-center text-sm font-medium text-amber-900">
-      Your last payment didn't go through — update your card in Settings → Billing to stay
+    <button
+      type="button"
+      onClick={() => openSettings('billing')}
+      className="w-full bg-amber-100 px-4 py-2 text-center text-sm font-medium text-amber-900 hover:bg-amber-200/70 transition-colors"
+    >
+      Your last payment didn&apos;t go through — update your card in Settings → Billing to stay
       uninterrupted.
-    </div>
+    </button>
   )
 }

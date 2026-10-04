@@ -1,12 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { queryClient } from '@/lib/query-client'
-import { AdvancedSettings } from '@/features/settings/advanced-settings'
-import { ReleaseNotesPanel } from '@/features/settings/release-notes-panel'
-import { useAuth } from '@/features/auth/auth-context'
+import { SettingsPanel, type SettingsGroup } from '@/features/settings/settings-panel'
+import { openSettings, openSupportDialog } from '@/features/settings/settings-events'
 import { useFamilyMember } from '@/features/auth/use-family-member'
 import { CalendarView, type CalendarMode } from '@/features/calendar/calendar-view'
-import { CalendarPicker } from '@/features/calendar/calendar-picker'
 import { TaskBar } from '@/features/tasks/task-bar'
 import { TaskSidebar } from '@/features/tasks/task-sidebar'
 import { GroceryPanel } from '@/features/grocery/grocery-panel'
@@ -14,22 +12,19 @@ import { NotesPanel } from '@/features/notes/notes-panel'
 import { DinnerBoard } from '@/features/meals/dinner-board'
 import { useTasks, useSyncTasks, type Task } from '@/features/tasks/use-tasks'
 import { TaskForm } from '@/features/tasks/task-form'
-import { useCalendarEvents, useSyncCalendars, useConnectedCalendars } from '@/features/calendar/use-calendar'
+import { useCalendarEvents, useSyncCalendars, useConnectedCalendars, useToggleCalendarVisibility } from '@/features/calendar/use-calendar'
 import { SystemSettings } from '@/lib/system-settings'
-import { APP_VERSION, APP_UPDATE_DATE } from '@/lib/version'
-import { useIsStaff } from '@/features/admin/use-is-staff'
 
 type Drawer = 'grocery' | 'notes' | null
 
 export function Dashboard() {
-  const { signOut } = useAuth()
   const { data: member } = useFamilyMember()
-  const isStaff = useIsStaff()
   const { data: tasks } = useTasks()
   const { data: events, isFetching: isFetchingEvents } = useCalendarEvents()
   const { data: calendars } = useConnectedCalendars()
   const syncCalendars = useSyncCalendars()
   const syncTasks = useSyncTasks()
+  const toggleVisibility = useToggleCalendarVisibility()
 
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
   const [mode, setMode] = useState<CalendarMode>(() => {
@@ -44,14 +39,26 @@ export function Dashboard() {
   }, [mode])
   const [menuOpen, setMenuOpen] = useState(false)
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null)
-  const [releaseNotesOpen, setReleaseNotesOpen] = useState(false)
   const [calPickerOpen, setCalPickerOpen] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [settingsGroup, setSettingsGroup] = useState<SettingsGroup | undefined>(undefined)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
   const familyName = member?.families?.name ?? 'Your Family'
-  const inviteCode = member?.families?.invite_code
+
+  // Deep links into settings (e.g. the payment banner → Billing, or the
+  // ⋯ menu's "Manage calendars" row → Calendars).
+  useEffect(() => {
+    const onOpenSettings = (e: Event) => {
+      const group = (e as CustomEvent<{ group?: SettingsGroup }>).detail?.group
+      setSettingsGroup(group)
+      setAdvancedOpen(true)
+      setMenuOpen(false)
+    }
+    window.addEventListener('supfam:open-settings', onOpenSettings)
+    return () => window.removeEventListener('supfam:open-settings', onOpenSettings)
+  }, [])
 
   // Filter events to only include those from visible calendars.
   // Memoized: CalendarView's memoized week/day cells rely on a stable array
@@ -184,13 +191,18 @@ export function Dashboard() {
               )}
             </div>
 
-            {/* Menu items */}
+            {/* Menu items — navigation only, with section labels */}
             <div className="py-1">
-              {/* Calendars */}
+              <p className="px-4 pt-2 pb-1 text-[11px] font-bold uppercase tracking-widest text-brown-700/40">
+                Your boards
+              </p>
+
+              {/* Calendars — simple show/hide checklist; full management lives in Settings */}
               <div className="relative">
                 <button
                   onClick={() => setCalPickerOpen(v => !v)}
                   className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-brown-700 hover:bg-cream-50 transition-colors"
+                  aria-expanded={calPickerOpen}
                 >
                   <svg className="h-4 w-4 text-brown-700/50" viewBox="0 0 16 16" fill="none">
                     <rect x="1.5" y="2.5" width="13" height="12" rx="2" stroke="currentColor" strokeWidth="1.5"/>
@@ -202,8 +214,45 @@ export function Dashboard() {
                   </svg>
                 </button>
                 {calPickerOpen && (
-                  <div className="border-t border-sand-100">
-                    <CalendarPicker onClose={() => setCalPickerOpen(false)} inline />
+                  <div className="border-t border-sand-100 py-1">
+                    {(calendars ?? []).map(cal => (
+                      <button
+                        key={cal.id}
+                        onClick={() =>
+                          toggleVisibility.mutate({ id: cal.id, is_visible: !cal.is_visible })
+                        }
+                        className="flex w-full items-center gap-3 px-4 py-2 text-sm text-brown-700 hover:bg-cream-50 transition-colors"
+                        title={cal.is_visible ? 'Hide from dashboard' : 'Show on dashboard'}
+                      >
+                        <span
+                          className="h-3 w-3 rounded-full flex-shrink-0 ring-1 ring-black/10"
+                          style={{ backgroundColor: cal.color ?? '#C4714F' }}
+                        />
+                        <span className="flex-1 truncate text-left">
+                          {cal.calendar_name ?? cal.calendar_id}
+                        </span>
+                        <span
+                          className={`flex h-[18px] w-[18px] items-center justify-center rounded-md border flex-shrink-0 ${
+                            cal.is_visible
+                              ? 'bg-terracotta-500 border-terracotta-500 text-white'
+                              : 'border-sand-300 bg-white text-transparent'
+                          }`}
+                        >
+                          <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
+                            <path d="M2.5 6l2.33 2.33L9.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </span>
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => openSettings('calendars')}
+                      className="flex w-full items-center gap-1.5 px-4 py-2 text-xs font-semibold text-terracotta-600 hover:bg-cream-50 transition-colors"
+                    >
+                      Manage calendars
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none">
+                        <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
                   </div>
                 )}
               </div>
@@ -253,115 +302,34 @@ export function Dashboard() {
               </button>
 
               <div className="h-px bg-sand-100 my-1" />
+              <p className="px-4 pt-1 pb-1 text-[11px] font-bold uppercase tracking-widest text-brown-700/40">
+                More
+              </p>
 
-              {/* Profile */}
-              <div className="px-4 py-2.5 flex items-center gap-2.5">
-                <div
-                  className="h-6 w-6 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: member?.avatar_color ?? '#5B8C5A' }}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-brown-800 truncate">{member?.display_name}</p>
-                  <p className="text-[11px] text-brown-700/40 truncate">{familyName}</p>
-                </div>
-              </div>
-
-              {/* Invite code */}
-              {inviteCode && (
-                <div className="px-4 pb-2.5">
-                  <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-brown-700/40">
-                    Partner invite code
-                  </p>
-                  <div className="flex items-center gap-2 rounded-lg border border-sand-200 bg-cream-50 px-3 py-2">
-                    <span className="flex-1 font-mono text-base tracking-[0.25em] text-brown-800 font-bold">
-                      {inviteCode}
-                    </span>
-                    <button
-                      onClick={() => { navigator.clipboard.writeText(inviteCode); setMenuOpen(false) }}
-                      className="text-[11px] font-semibold text-terracotta-500 hover:text-terracotta-600 transition-colors"
-                    >
-                      Copy
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div className="h-px bg-sand-100" />
-
-              {/* Advanced Settings */}
-              <div className="relative">
-                <button
-                  onClick={() => { setAdvancedOpen(true); setMenuOpen(false) }}
-                  className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-brown-700 hover:bg-cream-50 transition-colors"
-                >
-                  <svg className="h-4 w-4 opacity-50" viewBox="0 0 16 16" fill="none">
-                    <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.5"/>
-                    <path d="M8 2v1M8 13v1M2 8h1M13 8h1M3.5 3.5l.7.7M11.8 11.8l.7.7M3.5 12.5l.7-.7M11.8 4.2l.7-.7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
-                  Advanced settings
-                  <svg className={`ml-auto h-3.5 w-3.5 text-brown-700/30 transition-transform ${advancedOpen ? 'rotate-180' : ''}`} viewBox="0 0 14 14" fill="none">
-                    <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-              </div>
-
-              <div className="h-px bg-sand-100" />
-
-              {/* Staff-only: embedded UX analytics dashboard */}
-              {isStaff && (
-                <>
-                  <button
-                    onClick={() => {
-                      setMenuOpen(false)
-                      const u = new URL(window.location.href)
-                      u.searchParams.set('view', 'admin')
-                      window.location.href = u.toString()
-                    }}
-                    className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-brown-700 hover:bg-cream-50 transition-colors"
-                  >
-                    <svg className="h-4 w-4 opacity-50" viewBox="0 0 16 16" fill="none">
-                      <path d="M2 14h12M4 14V8M8 14V4M12 14v-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                    </svg>
-                    Experience analytics
-                  </button>
-                  <div className="h-px bg-sand-100" />
-                </>
-              )}
-
-              {/* Sup Fam logo with version & update date — tap for release notes */}
+              {/* Help & support */}
               <button
-                onClick={() => { setReleaseNotesOpen(true); setMenuOpen(false) }}
-                className="flex w-full items-center justify-between px-4 py-2 text-left hover:bg-cream-50 transition-colors"
+                onClick={() => { openSupportDialog(); setMenuOpen(false) }}
+                className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-brown-700 hover:bg-cream-50 transition-colors"
               >
-                <span className="font-handwritten text-xl text-terracotta-500 leading-none">
-                  Sup Fam
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="text-right flex flex-col items-end">
-                    <span className="font-mono text-[11px] font-semibold text-brown-700/60 leading-none">
-                      {APP_VERSION}
-                    </span>
-                    <span className="text-[10px] text-brown-700/40 mt-1 leading-none">
-                      {APP_UPDATE_DATE}
-                    </span>
-                  </span>
-                  <svg className="h-3.5 w-3.5 text-brown-700/30" viewBox="0 0 16 16" fill="none">
-                    <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </span>
+                <svg className="h-4 w-4 opacity-50" viewBox="0 0 16 16" fill="none">
+                  <path d="M14 8a5 5 0 0 1-5 5H2.5L4 11A5 5 0 1 1 14 8Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <circle cx="6" cy="8" r="0.8" fill="currentColor"/>
+                  <circle cx="8.5" cy="8" r="0.8" fill="currentColor"/>
+                  <circle cx="11" cy="8" r="0.8" fill="currentColor"/>
+                </svg>
+                Help & support
               </button>
 
-              <div className="h-px bg-sand-100" />
-
-              {/* Sign out */}
+              {/* Settings — one home for everything */}
               <button
-                onClick={signOut}
-                className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-brown-700/60 hover:bg-cream-50 hover:text-brown-700 transition-colors"
+                onClick={() => openSettings()}
+                className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-brown-700 hover:bg-cream-50 transition-colors"
               >
-                <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
-                  <path d="M6 2H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3M11 11l3-3-3-3M14 8H6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <svg className="h-4 w-4 opacity-50" viewBox="0 0 16 16" fill="none">
+                  <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.5"/>
+                  <path d="M8 2v1M8 13v1M2 8h1M13 8h1M3.5 3.5l.7.7M11.8 11.8l.7.7M3.5 12.5l.7-.7M11.8 4.2l.7-.7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                 </svg>
-                Sign out
+                Settings
               </button>
             </div>
           </div>
@@ -373,14 +341,13 @@ export function Dashboard() {
 
   return (
     <div className="fixed inset-0 flex flex-col bg-cream-100 overflow-hidden pt-safe">
-      {/* Advanced Settings full-screen panel */}
+      {/* Settings — one home for everything */}
       {advancedOpen && (
-        <AdvancedSettings onClose={() => setAdvancedOpen(false)} />
-      )}
-
-      {/* Release notes panel */}
-      {releaseNotesOpen && (
-        <ReleaseNotesPanel onClose={() => setReleaseNotesOpen(false)} />
+        <SettingsPanel
+          key={settingsGroup ?? 'last'}
+          onClose={() => setAdvancedOpen(false)}
+          initialGroup={settingsGroup}
+        />
       )}
 
       {/* ── Main: task sidebar + calendar + optional right drawer ── */}

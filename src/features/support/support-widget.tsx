@@ -13,6 +13,14 @@ export function SupportWidget() {
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
 
+  // The ⋯ menu's "Help & support" row and Settings → About open the dialog
+  // through this event — the floating bubble stays as-is.
+  useEffect(() => {
+    const onOpen = () => setOpen(true)
+    window.addEventListener('supfam:open-support', onOpen)
+    return () => window.removeEventListener('supfam:open-support', onOpen)
+  }, [])
+
   if (!user) return null
 
   return (

@@ -13,6 +13,7 @@ import {
   useUpdateCalendarColor,
   useDeleteConnectedCalendar,
   useToggleQuickToggle,
+  useToggleCalendarVisibility,
   type ConnectedCalendar,
 } from '@/features/calendar/use-calendar'
 import { AddCalendarModal } from '@/features/calendar/add-calendar-modal'
@@ -23,6 +24,12 @@ import {
   applyFontSize,
   type FontSizeScale,
 } from './font-size-utils'
+import { BillingSettings } from '@/features/billing/billing-settings'
+import { DinnerAiTab } from './dinner-ai-tab'
+import { ReleaseNotesPanel } from './release-notes-panel'
+import { YouSection, FamilySection } from './account-sections'
+import { openSupportDialog } from './settings-events'
+import { APP_VERSION, APP_UPDATE_DATE } from '@/lib/version'
 
 const PRESET_COLORS = [
   { label: 'Pink', value: '#E91E8C' },
@@ -37,42 +44,175 @@ const PRESET_COLORS = [
   { label: 'Terracotta', value: '#C4714F' },
 ]
 
-import { BillingSettings } from '@/features/billing/billing-settings'
-import { DinnerAiTab } from './dinner-ai-tab'
+export type SettingsGroup =
+  | 'you'
+  | 'family'
+  | 'calendars'
+  | 'appearance'
+  | 'display'
+  | 'dinner-ai'
+  | 'billing'
+  | 'about'
+  | 'notifications'
 
-type SettingsTab = 'calendars' | 'rules' | 'device' | 'dinner-ai' | 'billing'
+const GROUP_META: { id: SettingsGroup; label: string; icon: React.ReactNode }[] = [
+  {
+    id: 'you',
+    label: 'You',
+    icon: (
+      <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
+        <circle cx="8" cy="5.5" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M2.5 13.5c.8-2.6 2.9-4 5.5-4s4.7 1.4 5.5 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    id: 'family',
+    label: 'Family',
+    icon: (
+      <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
+        <circle cx="5.5" cy="6" r="2.3" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M1.5 13.2c.7-2.3 2.2-3.5 4-3.5s3.3 1.2 4 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        <circle cx="11.3" cy="6.4" r="1.8" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M9.4 13.2c.5-1.7 1.5-2.6 2.9-2.6 1 0 1.9.5 2.4 1.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    id: 'calendars',
+    label: 'Calendars',
+    icon: (
+      <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
+        <path d="M3.5 2V3.5M12.5 2V3.5M2.5 5.5H13.5M3.5 3.5H12.5C13.0523 3.5 13.5 3.94772 13.5 4.5V13.5C13.5 14.0523 13.0523 14.5 12.5 14.5H3.5C2.94772 14.5 2.5 14.0523 2.5 13.5V4.5C2.5 3.94772 2.94772 3.5 3.5 3.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+  {
+    id: 'appearance',
+    label: 'Appearance',
+    icon: (
+      <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
+        <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M8 2.5a5.5 5.5 0 0 1 0 11Z" fill="currentColor" />
+      </svg>
+    ),
+  },
+  {
+    id: 'display',
+    label: 'This display',
+    icon: (
+      <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
+        <rect x="2.5" y="3" width="11" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M6 13.5h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    id: 'dinner-ai',
+    label: 'Dinner AI',
+    icon: (
+      <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
+        <path d="M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        <circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+      </svg>
+    ),
+  },
+  {
+    id: 'billing',
+    label: 'Billing',
+    icon: (
+      <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
+        <rect x="2.5" y="4" width="11" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M2.5 7h11" stroke="currentColor" strokeWidth="1.5" />
+      </svg>
+    ),
+  },
+  {
+    id: 'about',
+    label: 'About',
+    icon: (
+      <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
+        <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M8 7.4V11M8 5.2v.3" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    id: 'notifications',
+    label: 'Notifications',
+    icon: (
+      <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
+        <path d="M8 2.5a3.5 3.5 0 0 1 3.5 3.5c0 2.5.8 3.5 1.5 4.5H3c.7-1 1.5-2 1.5-4.5A3.5 3.5 0 0 1 8 2.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M6.6 13a1.5 1.5 0 0 0 2.8 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+]
 
-export function AdvancedSettings({ onClose }: { onClose: () => void }) {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('calendars')
-  const { data: calendars } = useConnectedCalendars()
-  const { data: rules } = useEventColorRules()
+const LAST_GROUP_KEY = 'supfam-settings-group'
 
-  const calendarsCount = calendars?.length ?? 0
-  const rulesCount = rules?.length ?? 0
+/** One settings home: stable groups, plain-language labels, remembered position. */
+export function SettingsPanel({
+  onClose,
+  initialGroup,
+}: {
+  onClose: () => void
+  initialGroup?: SettingsGroup
+}) {
+  const [group, setGroup] = useState<SettingsGroup>(() => {
+    if (initialGroup && GROUP_META.some(g => g.id === initialGroup)) return initialGroup
+    try {
+      const saved = localStorage.getItem(LAST_GROUP_KEY)
+      if (saved && GROUP_META.some(g => g.id === saved)) return saved as SettingsGroup
+    } catch {
+      /* storage unavailable */
+    }
+    return 'you'
+  })
+  const [notesOpen, setNotesOpen] = useState(false)
+
+  // Remember where people left off so they don't re-orient every visit.
+  useEffect(() => {
+    try {
+      localStorage.setItem(LAST_GROUP_KEY, group)
+    } catch {
+      /* storage unavailable */
+    }
+  }, [group])
+
+  // Escape closes, everywhere.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   return (
     // Full-screen overlay
     <div className="fixed inset-0 z-50 flex items-stretch justify-end animate-in fade-in duration-200">
-      {/* Backdrop — transparent overlay to allow viewing real-time background layout & font size changes */}
+      {/* Backdrop */}
       <div
         className="absolute inset-0 bg-brown-950/15 backdrop-blur-[2px] transition-opacity"
         onClick={onClose}
       />
 
-      {/* Panel — slides in from the right, generous max-w-2xl for spacious layout */}
+      {/* Panel — slides in from the right */}
       <div className="relative z-10 flex flex-col bg-cream-50 w-full max-w-2xl shadow-2xl border-l border-sand-200 animate-in slide-in-from-right duration-300">
         {/* Header */}
         <div className="flex flex-col border-b border-sand-200/80 bg-white px-6 pt-5 pb-0 flex-shrink-0">
           <div className="flex items-start justify-between pb-4">
             <div>
-              <h2 className="font-serif text-2xl font-normal text-brown-800">Settings & Customization</h2>
+              <h2 className="font-serif text-2xl font-normal text-brown-800">Settings</h2>
               <p className="text-xs text-brown-700/60 mt-1 font-sans">
-                Tailor your family&apos;s ambient kitchen hub, calendars, and display behavior
+                You, your family, and this display — all in one place
               </p>
             </div>
             <button
               onClick={onClose}
               title="Close settings"
+              aria-label="Close settings"
               className="rounded-xl p-2 text-brown-700/50 hover:bg-sand-100 hover:text-brown-800 transition-colors"
             >
               <svg className="h-5 w-5" viewBox="0 0 20 20" fill="none">
@@ -81,75 +221,45 @@ export function AdvancedSettings({ onClose }: { onClose: () => void }) {
             </button>
           </div>
 
-          {/* Segmented Tab Navigation */}
-          <div className="flex items-center gap-2 -mb-px overflow-x-auto no-scrollbar">
-            <TabButton
-              active={activeTab === 'calendars'}
-              onClick={() => setActiveTab('calendars')}
-              icon={
-                <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
-                  <path d="M3.5 2V3.5M12.5 2V3.5M2.5 5.5H13.5M3.5 3.5H12.5C13.0523 3.5 13.5 3.94772 13.5 4.5V13.5C13.5 14.0523 13.0523 14.5 12.5 14.5H3.5C2.94772 14.5 2.5 14.0523 2.5 13.5V4.5C2.5 3.94772 2.94772 3.5 3.5 3.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              }
-              label="Connected Calendars"
-              badge={calendarsCount > 0 ? calendarsCount : undefined}
-            />
-            <TabButton
-              active={activeTab === 'rules'}
-              onClick={() => setActiveTab('rules')}
-              icon={
-                <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
-                  <path d="M8 2v12M2 8h12M4.5 4.5l7 7M11.5 4.5l-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-              }
-              label="Keyword Rules"
-              badge={rulesCount > 0 ? rulesCount : undefined}
-            />
-            <TabButton
-              active={activeTab === 'device'}
-              onClick={() => setActiveTab('device')}
-              icon={
-                <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
-                  <path d="M2.5 4C2.5 3.17157 3.17157 2.5 4 2.5H12C12.8284 2.5 13.5 3.17157 13.5 4V12C13.5 12.8284 12.8284 13.5 12 13.5H4C3.17157 13.5 2.5 12.8284 2.5 12V4Z" stroke="currentColor" strokeWidth="1.5" />
-                  <path d="M5.5 8H10.5M8 5.5V10.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-              }
-              label="Display & Device"
-            />
-            <TabButton
-              active={activeTab === 'dinner-ai'}
-              onClick={() => setActiveTab('dinner-ai')}
-              icon={
-                <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
-                  <path d="M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  <circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.5" />
-                </svg>
-              }
-              label="Dinner AI"
-            />
-            <TabButton
-              active={activeTab === 'billing'}
-              onClick={() => setActiveTab('billing')}
-              icon={
-                <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
-                  <rect x="2.5" y="4" width="11" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-                  <path d="M2.5 7h11" stroke="currentColor" strokeWidth="1.5" />
-                </svg>
-              }
-              label="Billing"
-            />
+          {/* Group navigation */}
+          <div className="flex items-center gap-2 -mb-px overflow-x-auto no-scrollbar" role="tablist" aria-label="Settings groups">
+            {GROUP_META.map(g => (
+              <TabButton
+                key={g.id}
+                active={group === g.id}
+                onClick={() => setGroup(g.id)}
+                icon={g.icon}
+                label={g.label}
+              />
+            ))}
           </div>
         </div>
 
-        {/* Scrollable Tab Content */}
+        {/* Scrollable group content */}
         <div className="flex-1 overflow-y-auto p-6">
-          {activeTab === 'calendars' && <ConnectedCalendarsTab />}
-          {activeTab === 'rules' && <EventColorRulesTab />}
-          {activeTab === 'device' && <DisplayAndDeviceTab />}
-          {activeTab === 'dinner-ai' && <DinnerAiTab />}
-          {activeTab === 'billing' && <BillingSettings />}
+          {group === 'you' && <YouSection />}
+          {group === 'family' && <FamilySection />}
+          {group === 'calendars' && (
+            <div className="space-y-6">
+              <ConnectedCalendarsSection />
+              <ColorRulesSection />
+            </div>
+          )}
+          {group === 'appearance' && (
+            <div className="space-y-6">
+              <ColorThemeSection />
+              <TextSizeSection />
+            </div>
+          )}
+          {group === 'display' && <ThisDisplaySection />}
+          {group === 'dinner-ai' && <DinnerAiTab />}
+          {group === 'billing' && <BillingSettings />}
+          {group === 'about' && <AboutSection onOpenNotes={() => setNotesOpen(true)} />}
+          {group === 'notifications' && <NotificationsPlaceholder />}
         </div>
       </div>
+
+      {notesOpen && <ReleaseNotesPanel onClose={() => setNotesOpen(false)} />}
     </div>
   )
 }
@@ -159,17 +269,17 @@ function TabButton({
   onClick,
   icon,
   label,
-  badge,
 }: {
   active: boolean
   onClick: () => void
   icon: React.ReactNode
   label: string
-  badge?: number
 }) {
   return (
     <button
       type="button"
+      role="tab"
+      aria-selected={active}
       onClick={onClick}
       className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-semibold transition-all whitespace-nowrap ${
         active
@@ -179,17 +289,6 @@ function TabButton({
     >
       <span className={active ? 'text-terracotta-500' : 'text-brown-700/40'}>{icon}</span>
       <span>{label}</span>
-      {badge !== undefined && (
-        <span
-          className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-            active
-              ? 'bg-terracotta-100 text-terracotta-700'
-              : 'bg-sand-100 text-brown-700/60'
-          }`}
-        >
-          {badge}
-        </span>
-      )}
     </button>
   )
 }
@@ -245,28 +344,29 @@ function ColorSwatchPicker({
   )
 }
 
-// ── Tab 1: Connected Calendars ──────────────────────────────────────────────
-function ConnectedCalendarsTab() {
+// ── "Calendars" group: connected calendars + color rules, one surface ────────
+function ConnectedCalendarsSection() {
   const { data: calendars, isLoading } = useConnectedCalendars()
   const updateColor = useUpdateCalendarColor()
   const [addModalOpen, setAddModalOpen] = useState(false)
 
-  // Group by owner
+  // Group by owner; calendars without a known owner land in "Other calendars"
+  // instead of an "UNKNOWN" section header.
   const byOwner = new Map<string, ConnectedCalendar[]>()
   for (const cal of calendars ?? []) {
-    const ownerName = cal.owner?.display_name ?? 'Unknown'
+    const ownerName = cal.owner?.display_name ?? 'Other calendars'
     if (!byOwner.has(ownerName)) byOwner.set(ownerName, [])
     byOwner.get(ownerName)!.push(cal)
   }
 
   return (
     <div className="space-y-6">
-      {/* Tab Banner */}
+      {/* Section Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl bg-white border border-sand-200/80 p-4 shadow-2xs">
         <div>
-          <h3 className="text-sm font-semibold text-brown-800">Connected Calendars</h3>
+          <h3 className="text-sm font-semibold text-brown-800">Connected calendars</h3>
           <p className="text-xs text-brown-700/60 mt-0.5">
-            Assign custom color themes per calendar and toggle shortcut pills on your home screen.
+            Choose which calendars appear on the dashboard, recolor them, and put shortcuts on your home screen.
           </p>
         </div>
         <button
@@ -349,6 +449,7 @@ function ConnectedCalendarCard({
   const [selectedColor, setSelectedColor] = useState(calendar.color ?? '#C4714F')
   const deleteCal = useDeleteConnectedCalendar()
   const toggleQuickToggle = useToggleQuickToggle()
+  const toggleVisibility = useToggleCalendarVisibility()
 
   const handleSaveColor = () => {
     onUpdateColor(selectedColor)
@@ -363,12 +464,13 @@ function ConnectedCalendarCard({
   return (
     <div className="rounded-2xl border border-sand-200/80 bg-white p-4 shadow-2xs transition-all hover:border-sand-300">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        {/* Left side: Swatch + Title + Provider Info */}
+        {/* Left side: Swatch (the one color-edit affordance) + Title + Provider Info */}
         <div className="flex items-center gap-3.5 min-w-0">
           <button
             type="button"
             onClick={() => setEditingColor(prev => !prev)}
-            title="Click to change color"
+            title="Change calendar color"
+            aria-label={`Change color for ${calendar.calendar_name ?? 'calendar'}`}
             className="group relative h-10 w-10 flex-shrink-0 rounded-xl transition-transform hover:scale-105 shadow-xs ring-1 ring-black/5 flex items-center justify-center"
             style={{ backgroundColor: calendar.color ?? '#C4714F' }}
           >
@@ -395,25 +497,50 @@ function ConnectedCalendarCard({
                 {calendar.provider}
               </span>
             </div>
-            <p className="text-xs text-brown-700/50 mt-0.5 truncate">
-              Color: <span className="font-mono">{calendar.color ?? '#C4714F'}</span>
-            </p>
+            {calendar.account_email && (
+              <p className="text-xs text-brown-700/50 mt-0.5 truncate">{calendar.account_email}</p>
+            )}
           </div>
         </div>
 
-        {/* Right side controls: Quick Toggle pill + Edit Color + Delete */}
+        {/* Right side controls: Visibility + Show-on-home + Delete */}
         <div className="flex items-center gap-2 self-end sm:self-center flex-wrap">
-          {/* Quick Toggle Switch Pill */}
+          {/* Visibility toggle */}
+          <button
+            type="button"
+            onClick={() =>
+              toggleVisibility.mutate({ id: calendar.id, is_visible: !calendar.is_visible })
+            }
+            title={
+              calendar.is_visible
+                ? 'Hide this calendar from the dashboard'
+                : 'Show this calendar on the dashboard'
+            }
+            aria-pressed={calendar.is_visible}
+            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all border ${
+              calendar.is_visible
+                ? 'bg-terracotta-50 border-terracotta-200 text-terracotta-600 hover:bg-terracotta-100'
+                : 'bg-cream-50 border-sand-200 text-brown-700/60 hover:text-brown-800 hover:bg-sand-100/70'
+            }`}
+          >
+            <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none">
+              <path d="M2 8s2.2-3.5 6-3.5S14 8 14 8s-2.2 3.5-6 3.5S2 8 2 8Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+              <circle cx="8" cy="8" r="1.5" fill="currentColor" />
+              {!calendar.is_visible && (
+                <path d="M3 3l10 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              )}
+            </svg>
+            <span>{calendar.is_visible ? 'Shown' : 'Hidden'}</span>
+          </button>
+
+          {/* Home-screen shortcut pill — one label, one job */}
           <button
             type="button"
             onClick={() =>
               toggleQuickToggle.mutate({ id: calendar.id, is_quick_toggle: !calendar.is_quick_toggle })
             }
-            title={
-              calendar.is_quick_toggle
-                ? 'Remove quick toggle from home screen'
-                : 'Pin quick toggle button on home screen'
-            }
+            title="Show a shortcut pill for this calendar on the home screen"
+            aria-pressed={!!calendar.is_quick_toggle}
             className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all border ${
               calendar.is_quick_toggle
                 ? 'bg-terracotta-50 border-terracotta-200 text-terracotta-600 hover:bg-terracotta-100'
@@ -425,20 +552,7 @@ function ConnectedCalendarCard({
                 calendar.is_quick_toggle ? 'bg-terracotta-500' : 'bg-brown-700/30'
               }`}
             />
-            <span>{calendar.is_quick_toggle ? 'Quick toggle on' : 'Pin to home'}</span>
-          </button>
-
-          {/* Edit Color Button */}
-          <button
-            type="button"
-            onClick={() => setEditingColor(prev => !prev)}
-            className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors border ${
-              editingColor
-                ? 'bg-brown-800 text-cream-50 border-brown-800'
-                : 'bg-white border-sand-200 text-brown-700 hover:bg-cream-50'
-            }`}
-          >
-            {editingColor ? 'Close' : 'Color'}
+            <span>Show on home</span>
           </button>
 
           {/* Delete Calendar Subscription */}
@@ -474,7 +588,7 @@ function ConnectedCalendarCard({
         </div>
       </div>
 
-      {/* Expandable Color Picker Drawer within the Card */}
+      {/* Expandable Color Picker Drawer within the Card (hex lives here, not on the card) */}
       {editingColor && (
         <div className="mt-3.5 border-t border-sand-150 pt-3.5 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
           <div className="flex items-center justify-between">
@@ -504,8 +618,15 @@ function ConnectedCalendarCard({
   )
 }
 
-// ── Tab 2: Event Color Rules ────────────────────────────────────────────────
-function EventColorRulesTab() {
+// ── "Calendars" group, part 2: Color rules (plain words, not system words) ──
+const MATCH_TYPE_LABELS: Record<EventColorRule['match_type'], string> = {
+  contains: 'contains these words',
+  starts_with: 'starts with these words',
+  ends_with: 'ends with these words',
+  exact: 'matches exactly',
+}
+
+function ColorRulesSection() {
   const { data: rules, isLoading } = useEventColorRules()
   const create = useCreateEventColorRule()
   const remove = useDeleteEventColorRule()
@@ -535,12 +656,12 @@ function EventColorRulesTab() {
 
   return (
     <div className="space-y-6">
-      {/* Tab Banner */}
+      {/* Section Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl bg-white border border-sand-200/80 p-4 shadow-2xs">
         <div>
-          <h3 className="text-sm font-semibold text-brown-800">Event Color Overrides</h3>
+          <h3 className="text-sm font-semibold text-brown-800">Color rules</h3>
           <p className="text-xs text-brown-700/60 mt-0.5">
-            Automatically highlight events (like birthdays, doctor visits, or sports) when keywords appear in the title.
+            Automatically recolor events — birthdays, game days, appointments — when the title matches words you choose.
           </p>
         </div>
         <button
@@ -555,7 +676,7 @@ function EventColorRulesTab() {
           <svg className={`h-3.5 w-3.5 transition-transform ${showAdd ? 'rotate-45' : ''}`} viewBox="0 0 12 12" fill="none">
             <path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
-          {showAdd ? 'Close form' : 'New Rule'}
+          {showAdd ? 'Close form' : 'New color rule'}
         </button>
       </div>
 
@@ -566,7 +687,7 @@ function EventColorRulesTab() {
           className="rounded-2xl border-2 border-terracotta-500/30 bg-white p-5 shadow-sm space-y-4 animate-in fade-in slide-in-from-top-2 duration-200"
         >
           <div className="flex items-center justify-between border-b border-sand-150 pb-3">
-            <span className="text-sm font-semibold text-brown-800">Create Keyword Rule</span>
+            <span className="text-sm font-semibold text-brown-800">New color rule</span>
             <button
               type="button"
               onClick={() => setShowAdd(false)}
@@ -578,7 +699,7 @@ function EventColorRulesTab() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-brown-700">Keyword</label>
+              <label className="text-xs font-semibold text-brown-700">Words to look for</label>
               <input
                 autoFocus
                 type="text"
@@ -602,7 +723,7 @@ function EventColorRulesTab() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-brown-700">Match Logic</label>
+            <label className="text-xs font-semibold text-brown-700">When the event title…</label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
               {(['contains', 'starts_with', 'ends_with', 'exact'] as const).map(m => (
                 <button
@@ -615,20 +736,14 @@ function EventColorRulesTab() {
                       : 'bg-cream-50 border border-sand-200 text-brown-700/70 hover:text-brown-800 hover:bg-cream-100'
                   }`}
                 >
-                  {m === 'contains'
-                    ? 'Contains keyword'
-                    : m === 'starts_with'
-                    ? 'Starts with'
-                    : m === 'ends_with'
-                    ? 'Ends with'
-                    : 'Exact match'}
+                  {MATCH_TYPE_LABELS[m]}
                 </button>
               ))}
             </div>
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-brown-700">Override Color</label>
+            <label className="text-xs font-semibold text-brown-700">Color</label>
             <ColorSwatchPicker selectedColor={newColor} onSelectColor={setNewColor} />
           </div>
 
@@ -665,7 +780,7 @@ function EventColorRulesTab() {
               disabled={!newKeyword.trim() || create.isPending}
               className="rounded-xl bg-terracotta-500 px-5 py-2 text-xs font-semibold text-white disabled:opacity-40 hover:bg-terracotta-600 transition-colors shadow-xs"
             >
-              {create.isPending ? 'Saving…' : 'Save Rule'}
+              {create.isPending ? 'Saving…' : 'Save rule'}
             </button>
           </div>
         </form>
@@ -685,7 +800,7 @@ function EventColorRulesTab() {
             <path d="M7 21A4 4 0 013 17V7A4 4 0 017 3H17A4 4 0 0121 7V17A4 4 0 0117 21H7Z" stroke="currentColor" strokeWidth="1.5"/>
             <path d="M9 10L11.5 12.5L15.5 8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-          <p className="text-sm font-semibold text-brown-800">No color override rules yet</p>
+          <p className="text-sm font-semibold text-brown-800">No color rules yet</p>
           <p className="text-xs text-brown-700/50 mt-1 max-w-sm mx-auto">
             Create rules to give specific activities (like birthdays or school events) their own distinctive highlight across all calendars.
           </p>
@@ -694,7 +809,7 @@ function EventColorRulesTab() {
             onClick={() => setShowAdd(true)}
             className="mt-4 rounded-xl bg-brown-800 px-4 py-2 text-xs font-semibold text-cream-50 hover:bg-brown-900 transition-colors"
           >
-            Add First Rule
+            Add your first rule
           </button>
         </div>
       )}
@@ -758,14 +873,8 @@ function RuleCard({
                 <span className="text-sm font-bold text-brown-800 truncate">
                   &ldquo;{rule.keyword}&rdquo;
                 </span>
-                <span className="text-[10px] font-semibold bg-sand-100 text-brown-700/70 rounded-md px-1.5 py-0.5 uppercase tracking-wider">
-                  {rule.match_type === 'contains'
-                    ? 'Contains'
-                    : rule.match_type === 'starts_with'
-                    ? 'Starts with'
-                    : rule.match_type === 'ends_with'
-                    ? 'Ends with'
-                    : 'Exact'}
+                <span className="text-[10px] font-semibold bg-sand-100 text-brown-700/70 rounded-md px-1.5 py-0.5 tracking-wide">
+                  title {MATCH_TYPE_LABELS[rule.match_type]}
                 </span>
               </div>
               {rule.label && (
@@ -814,13 +923,13 @@ function RuleCard({
         /* Inline Editing State */
         <div className="space-y-4 animate-in fade-in duration-150">
           <div className="flex items-center justify-between border-b border-sand-150 pb-2.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-brown-700">Edit Keyword Rule</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-brown-700">Edit color rule</span>
             <span className="text-xs text-brown-700/50 font-mono">ID: {rule.id.slice(0, 8)}</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] font-semibold text-brown-700 block mb-1">Keyword</label>
+              <label className="text-[11px] font-semibold text-brown-700 block mb-1">Words to look for</label>
               <input
                 type="text"
                 value={keyword}
@@ -829,16 +938,17 @@ function RuleCard({
               />
             </div>
             <div>
-              <label className="text-[11px] font-semibold text-brown-700 block mb-1">Match Type</label>
+              <label className="text-[11px] font-semibold text-brown-700 block mb-1">When the event title…</label>
               <select
                 value={matchType}
                 onChange={e => setMatchType(e.target.value as EventColorRule['match_type'])}
                 className="w-full rounded-xl border border-sand-300 bg-cream-50/50 px-3 py-1.5 text-sm text-brown-800 focus:border-terracotta-500 focus:outline-none"
               >
-                <option value="contains">Contains keyword</option>
-                <option value="starts_with">Starts with keyword</option>
-                <option value="ends_with">Ends with keyword</option>
-                <option value="exact">Exact title match</option>
+                {(['contains', 'starts_with', 'ends_with', 'exact'] as const).map(m => (
+                  <option key={m} value={m}>
+                    {MATCH_TYPE_LABELS[m]}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -855,7 +965,7 @@ function RuleCard({
           </div>
 
           <div>
-            <label className="text-[11px] font-semibold text-brown-700 block mb-1.5">Color Theme</label>
+            <label className="text-[11px] font-semibold text-brown-700 block mb-1.5">Color</label>
             <ColorSwatchPicker selectedColor={color} onSelectColor={setColor} />
           </div>
 
@@ -888,17 +998,7 @@ function RuleCard({
   )
 }
 
-// ── Tab 3: Display & Device Settings ────────────────────────────────────────
-function DisplayAndDeviceTab() {
-  return (
-    <div className="space-y-6">
-      <ColorThemeSection />
-      <FontSizeSection />
-      <AmbientDeviceSection />
-    </div>
-  )
-}
-
+// ── "Appearance" group ──────────────────────────────────────────────────────
 function ColorThemeSection() {
   const { theme, setTheme } = useTheme()
 
@@ -967,7 +1067,7 @@ function ColorThemeSection() {
   )
 }
 
-function FontSizeSection() {
+function TextSizeSection() {
   const [fontSize, setFontSize] = useState<FontSizeScale>(getSavedFontSize)
 
   const handleDecrease = () => {
@@ -996,9 +1096,9 @@ function FontSizeSection() {
   return (
     <div className="rounded-2xl border border-sand-200/80 bg-white p-5 shadow-2xs space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-brown-800">Interface Scale & Text Size</h3>
+        <h3 className="text-sm font-semibold text-brown-800">Text size</h3>
         <p className="text-xs text-brown-700/60 mt-0.5">
-          Adjust layout proportions and typography for comfortable viewing from across the kitchen.
+          Make text and layout bigger or smaller on this display — handy for reading from across the kitchen.
         </p>
       </div>
 
@@ -1010,7 +1110,7 @@ function FontSizeSection() {
           </span>
           <p className="font-serif text-lg text-brown-800 mt-1">Family Dinner at 6:30 PM</p>
           <p className="text-xs text-brown-700/60 font-sans mt-0.5">
-            Zac • Kitchen Counter Dashboard
+            Sample family · Kitchen Counter Dashboard
           </p>
         </div>
         <div className="text-right flex-shrink-0">
@@ -1085,7 +1185,8 @@ function FontSizeSection() {
   )
 }
 
-function AmbientDeviceSection() {
+// ── "This display" group: device-only settings, labeled as such ────────────
+function ThisDisplaySection() {
   const [keepScreenOn, setKeepScreenOn] = useState(false)
   const [immersiveMode, setImmersiveMode] = useState(false)
   const [brightness, setBrightness] = useState<number>(-1.0) // -1.0 means default
@@ -1118,147 +1219,255 @@ function AmbientDeviceSection() {
   }
 
   return (
-    <div className="rounded-2xl border border-sand-200/80 bg-white p-5 shadow-2xs space-y-5">
-      <div>
-        <h3 className="text-sm font-semibold text-brown-800">Ambient Display & Hardware</h3>
-        <p className="text-xs text-brown-700/60 mt-0.5">
-          Configure screen wake settings and status bar behavior for your dedicated home dashboard.
-        </p>
-      </div>
-
-      <div className="space-y-3">
-        {/* Always-on display toggle */}
-        <div className="flex items-center justify-between rounded-xl border border-sand-200/60 bg-cream-50/40 p-4">
-          <div className="flex flex-col gap-0.5 pr-4">
-            <span className="text-sm font-semibold text-brown-800">Always-On Display</span>
-            <span className="text-xs text-brown-700/60">
-              Prevent the screen from going to sleep or dimming on inactivity
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={handleToggleKeepScreen}
-            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-              keepScreenOn ? 'bg-terracotta-500' : 'bg-sand-300'
-            }`}
-            role="switch"
-            aria-checked={keepScreenOn}
-          >
-            <span
-              aria-hidden="true"
-              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                keepScreenOn ? 'translate-x-5' : 'translate-x-0'
-              }`}
-            />
-          </button>
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-sand-200/80 bg-white p-5 shadow-2xs space-y-5">
+        <div>
+          <h3 className="text-sm font-semibold text-brown-800">This display</h3>
+          <p className="text-xs text-brown-700/60 mt-0.5">
+            Screen and hardware behavior for the display you&apos;re looking at right now —
+            these never sync to the rest of the family.
+          </p>
         </div>
 
-        {/* Immersive fullscreen toggle */}
-        <div className="flex items-center justify-between rounded-xl border border-sand-200/60 bg-cream-50/40 p-4">
-          <div className="flex flex-col gap-0.5 pr-4">
-            <span className="text-sm font-semibold text-brown-800">Immersive Fullscreen</span>
-            <span className="text-xs text-brown-700/60">
-              Hide system status bars and gesture navigation lines for a clean frame
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={handleToggleImmersive}
-            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-              immersiveMode ? 'bg-terracotta-500' : 'bg-sand-300'
-            }`}
-            role="switch"
-            aria-checked={immersiveMode}
-          >
-            <span
-              aria-hidden="true"
-              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                immersiveMode ? 'translate-x-5' : 'translate-x-0'
-              }`}
-            />
-          </button>
-        </div>
-
-        {/* App Brightness */}
-        <div className="rounded-xl border border-sand-200/60 bg-cream-50/40 p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex flex-col gap-0.5">
-              <span className="text-sm font-semibold text-brown-800">Screen Brightness Override</span>
+        <div className="space-y-3">
+          {/* Always-on display toggle */}
+          <div className="flex items-center justify-between rounded-xl border border-sand-200/60 bg-cream-50/40 p-4">
+            <div className="flex flex-col gap-0.5 pr-4">
+              <span className="text-sm font-semibold text-brown-800">Always-on display</span>
               <span className="text-xs text-brown-700/60">
-                Directly adjust brightness within the ambient dashboard
+                Keep this screen awake — no sleep or dimming when nobody&apos;s touching it
               </span>
             </div>
-            <span className="text-xs font-bold text-brown-800 uppercase tracking-wider bg-white border border-sand-200 px-2.5 py-1 rounded-lg shadow-2xs">
-              {brightness === -1.0 ? 'System Auto' : `${Math.round(brightness * 100)}%`}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3 pt-1">
             <button
               type="button"
-              onClick={() => handleBrightnessChange(-1.0)}
-              className={`text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all ${
-                brightness === -1.0
-                  ? 'bg-brown-800 border-brown-800 text-cream-50 shadow-2xs'
-                  : 'bg-white border-sand-300 text-brown-700 hover:bg-cream-100'
+              onClick={handleToggleKeepScreen}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                keepScreenOn ? 'bg-terracotta-500' : 'bg-sand-300'
               }`}
+              role="switch"
+              aria-checked={keepScreenOn}
+              aria-label="Always-on display"
             >
-              System Auto
+              <span
+                aria-hidden="true"
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  keepScreenOn ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
             </button>
-            <input
-              type="range"
-              min="0.1"
-              max="1.0"
-              step="0.05"
-              value={brightness === -1.0 ? 1.0 : brightness}
-              disabled={brightness === -1.0}
-              onChange={e => handleBrightnessChange(parseFloat(e.target.value))}
-              className="flex-1 h-2 bg-sand-200 rounded-lg appearance-none cursor-pointer accent-terracotta-500 disabled:opacity-30 disabled:cursor-not-allowed"
-            />
           </div>
-        </div>
 
-        {/* System Settings Shortcuts */}
-        <div className="pt-2">
-          <p className="text-xs font-semibold text-brown-700/60 uppercase tracking-wider mb-2 px-1">
-            Native System shortcuts
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          {/* Fullscreen toggle */}
+          <div className="flex items-center justify-between rounded-xl border border-sand-200/60 bg-cream-50/40 p-4">
+            <div className="flex flex-col gap-0.5 pr-4">
+              <span className="text-sm font-semibold text-brown-800">Fullscreen</span>
+              <span className="text-xs text-brown-700/60">
+                Hide the system status bar and navigation lines for a clean frame
+              </span>
+            </div>
             <button
               type="button"
-              onClick={() => SystemSettings.openSystemSettings('display')}
-              className="flex items-center justify-center gap-2 rounded-xl border border-sand-200 bg-white px-4 py-3 text-xs font-semibold text-brown-700 hover:bg-cream-50 active:bg-cream-100 transition-all shadow-2xs"
+              onClick={handleToggleImmersive}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                immersiveMode ? 'bg-terracotta-500' : 'bg-sand-300'
+              }`}
+              role="switch"
+              aria-checked={immersiveMode}
+              aria-label="Fullscreen"
             >
-              <svg className="h-4 w-4 text-brown-700/50" viewBox="0 0 16 16" fill="none">
-                <circle cx="8" cy="8" r="4" stroke="currentColor" strokeWidth="1.5" />
-                <path
-                  d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-              Display Settings
+              <span
+                aria-hidden="true"
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  immersiveMode ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
             </button>
-            <button
-              type="button"
-              onClick={() => SystemSettings.openSystemSettings('general')}
-              className="flex items-center justify-center gap-2 rounded-xl border border-sand-200 bg-white px-4 py-3 text-xs font-semibold text-brown-700 hover:bg-cream-50 active:bg-cream-100 transition-all shadow-2xs"
-            >
-              <svg className="h-4 w-4 text-brown-700/50" viewBox="0 0 16 16" fill="none">
-                <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.5" />
-                <path
-                  d="M8 2v1M8 13v1M2 8h1M13 8h1M3.5 3.5l.7.7M11.8 11.8l.7.7M3.5 12.5l.7-.7M11.8 4.2l.7-.7"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-              Device Settings
-            </button>
+          </div>
+
+          {/* Brightness */}
+          <div className="rounded-xl border border-sand-200/60 bg-cream-50/40 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm font-semibold text-brown-800">Brightness</span>
+                <span className="text-xs text-brown-700/60">
+                  Set this display&apos;s brightness inside the app, or leave it on System Auto
+                </span>
+              </div>
+              <span className="text-xs font-bold text-brown-800 uppercase tracking-wider bg-white border border-sand-200 px-2.5 py-1 rounded-lg shadow-2xs">
+                {brightness === -1.0 ? 'System Auto' : `${Math.round(brightness * 100)}%`}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => handleBrightnessChange(-1.0)}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all ${
+                  brightness === -1.0
+                    ? 'bg-brown-800 border-brown-800 text-cream-50 shadow-2xs'
+                    : 'bg-white border-sand-300 text-brown-700 hover:bg-cream-100'
+                }`}
+              >
+                System Auto
+              </button>
+              <input
+                type="range"
+                min="0.1"
+                max="1.0"
+                step="0.05"
+                value={brightness === -1.0 ? 1.0 : brightness}
+                disabled={brightness === -1.0}
+                onChange={e => handleBrightnessChange(parseFloat(e.target.value))}
+                className="flex-1 h-2 bg-sand-200 rounded-lg appearance-none cursor-pointer accent-terracotta-500 disabled:opacity-30 disabled:cursor-not-allowed"
+                aria-label="Brightness"
+              />
+            </div>
+          </div>
+
+          {/* System Settings Shortcuts */}
+          <div className="pt-2">
+            <p className="text-xs font-semibold text-brown-700/60 uppercase tracking-wider mb-2 px-1">
+              System shortcuts
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => SystemSettings.openSystemSettings('display')}
+                className="flex items-center justify-center gap-2 rounded-xl border border-sand-200 bg-white px-4 py-3 text-xs font-semibold text-brown-700 hover:bg-cream-50 active:bg-cream-100 transition-all shadow-2xs"
+              >
+                <svg className="h-4 w-4 text-brown-700/50" viewBox="0 0 16 16" fill="none">
+                  <circle cx="8" cy="8" r="4" stroke="currentColor" strokeWidth="1.5" />
+                  <path
+                    d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                Display Settings
+              </button>
+              <button
+                type="button"
+                onClick={() => SystemSettings.openSystemSettings('general')}
+                className="flex items-center justify-center gap-2 rounded-xl border border-sand-200 bg-white px-4 py-3 text-xs font-semibold text-brown-700 hover:bg-cream-50 active:bg-cream-100 transition-all shadow-2xs"
+              >
+                <svg className="h-4 w-4 text-brown-700/50" viewBox="0 0 16 16" fill="none">
+                  <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.5" />
+                  <path
+                    d="M8 2v1M8 13v1M2 8h1M13 8h1M3.5 3.5l.7.7M11.8 11.8l.7.7M3.5 12.5l.7-.7M11.8 4.2l.7-.7"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                Device Settings
+              </button>
+            </div>
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── "About" group: What's new gets a real door ──────────────────────────────
+function AboutSection({ onOpenNotes }: { onOpenNotes: () => void }) {
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-sand-200/80 bg-white p-2 shadow-2xs">
+        {/* What's new — first-class labeled row */}
+        <button
+          type="button"
+          onClick={onOpenNotes}
+          className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-left hover:bg-cream-50 transition-colors"
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-terracotta-100 text-terracotta-600 flex-shrink-0">
+            <svg className="h-4.5 w-4.5" viewBox="0 0 18 18" fill="none">
+              <path d="M9 1.5v3M9 13.5v3M1.5 9h3M13.5 9h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              <circle cx="9" cy="9" r="2.75" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-sm font-semibold text-brown-800">What&apos;s new</span>
+            <span className="block text-xs text-brown-700/50 mt-0.5">
+              See what changed in the latest updates
+            </span>
+          </span>
+          <span className="rounded-full bg-terracotta-100 px-2.5 py-0.5 font-mono text-[11px] font-bold text-terracotta-600 flex-shrink-0">
+            {APP_VERSION}
+          </span>
+          <svg className="h-4 w-4 text-brown-700/30 flex-shrink-0" viewBox="0 0 16 16" fill="none">
+            <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+
+        <div className="mx-4 h-px bg-sand-100" />
+
+        {/* Version — informational, not a tap target */}
+        <div className="flex w-full items-center gap-3 px-4 py-3.5">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-sand-100 text-brown-700/60 flex-shrink-0">
+            <svg className="h-4.5 w-4.5" viewBox="0 0 18 18" fill="none">
+              <circle cx="9" cy="9" r="6.5" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M9 8.4V12M9 6v.3" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+            </svg>
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-sm font-semibold text-brown-800">Version</span>
+            <span className="block text-xs text-brown-700/50 mt-0.5 font-mono">
+              {APP_VERSION} · {APP_UPDATE_DATE}
+            </span>
+          </span>
+        </div>
+
+        <div className="mx-4 h-px bg-sand-100" />
+
+        {/* Contact support — discoverable path, alongside the floating bubble */}
+        <button
+          type="button"
+          onClick={openSupportDialog}
+          className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-left hover:bg-cream-50 transition-colors"
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-sand-100 text-brown-700/60 flex-shrink-0">
+            <svg className="h-4.5 w-4.5" viewBox="0 0 18 18" fill="none">
+              <path
+                d="M15.75 9a6 6 0 0 1-6 6H3l1.7-2.2A6 6 0 1 1 15.75 9Z"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <circle cx="7" cy="9" r="0.9" fill="currentColor" />
+              <circle cx="10" cy="9" r="0.9" fill="currentColor" />
+              <circle cx="13" cy="9" r="0.9" fill="currentColor" />
+            </svg>
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-sm font-semibold text-brown-800">Contact support</span>
+            <span className="block text-xs text-brown-700/50 mt-0.5">
+              Message us — we reply by email
+            </span>
+          </span>
+          <svg className="h-4 w-4 text-brown-700/30 flex-shrink-0" viewBox="0 0 16 16" fill="none">
+            <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── "Notifications" group: reserved slot, nothing ships yet ────────────────
+function NotificationsPlaceholder() {
+  return (
+    <div className="rounded-2xl border border-dashed border-sand-300 bg-white p-8 text-center">
+      <svg className="mx-auto h-10 w-10 text-brown-700/30 mb-2" viewBox="0 0 16 16" fill="none">
+        <path d="M8 2.5a3.5 3.5 0 0 1 3.5 3.5c0 2.5.8 3.5 1.5 4.5H3c.7-1 1.5-2 1.5-4.5A3.5 3.5 0 0 1 8 2.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M6.6 13a1.5 1.5 0 0 0 2.8 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+      <p className="text-sm font-semibold text-brown-800">Nothing here yet</p>
+      <p className="text-xs text-brown-700/50 mt-1 max-w-sm mx-auto">
+        When reminders and notifications arrive, this is where you&apos;ll manage them.
+      </p>
     </div>
   )
 }

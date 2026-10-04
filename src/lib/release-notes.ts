@@ -1,4 +1,4 @@
-// Release notes shown in the app (⋯ menu → version row).
+// Release notes shown in the app (Settings → About → What's new).
 //
 // Written for non-technical readers: plain language, minimal detail.
 // Ordered newest → oldest so the latest changes are on top.
@@ -20,6 +20,20 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: 'v1.2.0',
+    date: 'Oct 4, 2026',
+    headline: 'Settings got a full spring-clean.',
+    notes: [
+      'Settings is now one tidy home: You, Family, Calendars, Appearance, This display, Dinner AI, Billing, About — plus a spot saved for Notifications.',
+      'The two calendar managers are now one: show/hide, recolor, and home-screen shortcuts all live together under Calendars.',
+      'Plain words everywhere: “Color rules” instead of “Keyword Rules”, “Show on home” instead of “Quick toggle”, and “This display” for the iPad-only settings.',
+      'New under Family: see your members, manage the invite code, and edit your own profile name and avatar color under You.',
+      '“What’s new” got a real door: Settings → About → What’s new — no more tapping the version number.',
+      'The ⋯ menu is navigation only now: your boards up top, Help & support and Settings under More.',
+      'The payment nudge now jumps straight to Settings → Billing.',
+    ],
+  },
   {
     version: 'v1.1.9',
     date: 'Oct 1, 2026',
