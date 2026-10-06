@@ -155,6 +155,10 @@ Deno.serve(async (req) => {
 
           let pageToken: string | undefined = undefined
           const events: any[] = []
+          // Only run the stale-row cleanup below when we got a complete,
+          // successful feed. A failed page would otherwise make fetchedIds
+          // partial and wipe events that still exist upstream.
+          let feedComplete = true
 
           do {
             const queryParams = new URLSearchParams({
@@ -173,7 +177,10 @@ Deno.serve(async (req) => {
               { headers: { Authorization: `Bearer ${accessToken}` } }
             )
 
-            if (!eventsRes.ok) break
+            if (!eventsRes.ok) {
+              feedComplete = false
+              break
+            }
 
             const eventsData = await eventsRes.json()
             if (eventsData.items) {
@@ -257,14 +264,18 @@ Deno.serve(async (req) => {
               .upsert(toUpsert.slice(i, i + 200), { onConflict: "family_id,external_event_id" })
           }
 
-          // Clean up deleted events
-          const toDelete = (existingEvents ?? [])
-            .filter((e: any) => e.external_event_id && !fetchedIds.includes(e.external_event_id))
-            .map((e: any) => e.id)
+          // Clean up deleted events — only when the feed was fully fetched
+          // (a failed page leaves fetchedIds partial; deleting then would
+          // wipe live events).
+          if (feedComplete) {
+            const toDelete = (existingEvents ?? [])
+              .filter((e: any) => e.external_event_id && !fetchedIds.includes(e.external_event_id))
+              .map((e: any) => e.id)
 
-          if (toDelete.length > 0) {
-            for (let i = 0; i < toDelete.length; i += 200) {
-              await supabase.from("calendar_events").delete().in("id", toDelete.slice(i, i + 200))
+            if (toDelete.length > 0) {
+              for (let i = 0; i < toDelete.length; i += 200) {
+                await supabase.from("calendar_events").delete().in("id", toDelete.slice(i, i + 200))
+              }
             }
           }
         }

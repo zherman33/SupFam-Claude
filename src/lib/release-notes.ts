@@ -21,6 +21,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: 'v1.2.1',
+    date: 'Oct 6, 2026',
+    headline: 'Calendar cleanup: no more double events.',
+    notes: [
+      'Events that showed up twice — like the same appointment appearing two times — now appear just once.',
+      'Cancelled events clear out properly instead of hanging around on the calendar.',
+      'Multi-day all-day events (like a trip) now stretch across the week as one banner in the 1-week view, matching the other views.',
+      'Deleting an event removes it for the whole family, quietly — no more confusing “declined” emails.',
+    ],
+  },
+  {
     version: 'v1.2.0',
     date: 'Oct 4, 2026',
     headline: 'Settings got a full spring-clean.',

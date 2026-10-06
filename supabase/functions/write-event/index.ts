@@ -38,9 +38,79 @@ Deno.serve(async (req) => {
     // ── DELETE ────────────────────────────────────────────────────────────
     if (action === "delete") {
       if (!event?.id) return jsonResp({ error: "event.id required" }, 400)
-      const res = await fetch(`${GCAL}/${calEncoded}/events/${event.id}`, { method: "DELETE", headers: authHeaders(accessToken) })
-      if (!res.ok && res.status !== 404) return jsonResp({ error: `Google ${res.status}: ${await res.text()}` }, 502)
-      await supabase.from("calendar_events").delete().eq("external_event_id", event.id)
+
+      // A Google event ID is shared by every calendar carrying the event
+      // (organizer + each attendee's copy). Deleting just one copy would
+      // merely record a "decline" for that calendar's owner — and Google
+      // would email the organizer "<owner> declined: <event>". So fan the
+      // delete out to every family Google calendar, silently
+      // (sendUpdates=none): a Sup Fam delete is a true family-wide delete,
+      // never a decline, never an email.
+      const { data: actor } = await supabase
+        .from("family_members")
+        .select("family_id")
+        .eq("id", family_member_id)
+        .single()
+      const familyId = (actor as any)?.family_id ?? null
+
+      const { data: famCals } = familyId
+        ? await supabase
+            .from("connected_calendars")
+            .select("calendar_id, family_member_id, family_members!inner(family_id)")
+            .eq("provider", "google")
+            .eq("family_members.family_id", familyId)
+        : { data: null }
+
+      // Primary target first (the calendar the event was opened from), then
+      // every other family Google calendar as best-effort.
+      const targets: { calendarId: string; memberId: string }[] = [
+        { calendarId: calendar_id, memberId: family_member_id },
+      ]
+      const seenCals = new Set([calendar_id])
+      for (const c of ((famCals as any[]) ?? [])) {
+        if (
+          c.calendar_id &&
+          !seenCals.has(c.calendar_id) &&
+          !c.calendar_id.includes("#holiday") &&
+          !c.calendar_id.includes("#contacts")
+        ) {
+          seenCals.add(c.calendar_id)
+          targets.push({ calendarId: c.calendar_id, memberId: c.family_member_id })
+        }
+      }
+
+      let deletedAny = false
+      let sawOnlyNotFound = true
+      const errors: string[] = []
+      for (const t of targets) {
+        const tok = tokMap.get(t.memberId)
+        if (!tok) continue
+        let tokAccess: string
+        try {
+          tokAccess = await freshToken(tok, t.memberId, supabase)
+        } catch {
+          continue
+        }
+        const res = await fetch(
+          `${GCAL}/${encodeURIComponent(t.calendarId)}/events/${encodeURIComponent(event.id)}?sendUpdates=none`,
+          { method: "DELETE", headers: authHeaders(tokAccess) }
+        )
+        if (res.ok) {
+          deletedAny = true
+          sawOnlyNotFound = false
+        } else if (res.status !== 404) {
+          sawOnlyNotFound = false
+          errors.push(`${t.calendarId}: Google ${res.status}`)
+        }
+      }
+      // All copies already gone (all 404) is still success — idempotent.
+      if (!deletedAny && !sawOnlyNotFound) {
+        return jsonResp({ error: errors.join("; ") || "Delete failed" }, 502)
+      }
+
+      let localDel = supabase.from("calendar_events").delete().eq("external_event_id", event.id)
+      if (familyId) localDel = localDel.eq("family_id", familyId)
+      await localDel
       return jsonResp({ success: true })
     }
 
@@ -101,8 +171,10 @@ Deno.serve(async (req) => {
           // The event appears on the invitee's primary calendar — accept it there
           // We need to find it first by listing events with the same iCalUID or just patch by ID
           // Google propagates the event to invitee's calendar with the same event ID
+          // sendUpdates=none: this is internal bookkeeping, the organizer
+          // must not get a "<member> accepted" email for every family event.
           const acceptRes = await fetch(
-            `${GCAL}/${encodeURIComponent(email)}/events/${created.id}`,
+            `${GCAL}/${encodeURIComponent(email)}/events/${created.id}?sendUpdates=none`,
             {
               method: "PATCH",
               headers: authHeaders(inviteeToken),

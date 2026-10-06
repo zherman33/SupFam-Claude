@@ -152,7 +152,37 @@ export function useCalendarEvents() {
 
     const seenExternalIds = new Set<string>()
     const seenOccurrenceKeys = new Set<string>()
+    // Fuzzy dedup: the same real-world occurrence can arrive under two
+    // different upstream IDs (e.g. an appointment created twice in Google
+    // Calendar, or attendee copies on two family members' calendars). Events
+    // with identical normalized title + start + end are the same occurrence —
+    // keep the richest record so this can never render twice again.
+    const fuzzyKeyToIndex = new Map<string, number>()
     const deduped: CalendarEvent[] = []
+
+    const fuzzyKey = (ev: CalendarEvent) => {
+      const title = ev.title.trim().toLowerCase()
+      if (!title || title === '(no title)') return null
+      return `${title}|${ev.start_at}|${ev.end_at ?? ''}|${ev.all_day ? '1' : '0'}`
+    }
+    const richness = (ev: CalendarEvent) =>
+      (ev.description?.trim() ? 1 : 0) + (ev.location?.trim() ? 1 : 0)
+
+    const pushDeduped = (ev: CalendarEvent) => {
+      const key = fuzzyKey(ev)
+      if (key) {
+        const existingIdx = fuzzyKeyToIndex.get(key)
+        if (existingIdx !== undefined) {
+          // Same occurrence already kept — swap in the richer record.
+          if (richness(ev) > richness(deduped[existingIdx])) {
+            deduped[existingIdx] = ev
+          }
+          return
+        }
+        fuzzyKeyToIndex.set(key, deduped.length)
+      }
+      deduped.push(ev)
+    }
 
     for (const ev of visibleEvents) {
       if (ev.external_event_id) {
@@ -181,7 +211,7 @@ export function useCalendarEvents() {
         }
         seenOccurrenceKeys.add(occurrenceKey)
       }
-      deduped.push(ev)
+      pushDeduped(ev)
     }
 
     return deduped

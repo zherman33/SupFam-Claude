@@ -1,6 +1,6 @@
 import { useEffect, useRef, useMemo, useCallback, memo } from 'react'
 import { format, isToday, parseISO } from 'date-fns'
-import { useConnectedCalendars, type CalendarEvent } from './use-calendar'
+import { useConnectedCalendars, getEventDateBounds, type CalendarEvent } from './use-calendar'
 import { useEventColorRules, applyColorRules } from '@/features/settings/use-event-color-rules'
 import { getEventThemeStyles } from '@/features/settings/theme-context'
 
@@ -84,6 +84,85 @@ export const TimeGridView = memo(function TimeGridView({
     }
     return map
   }, [events])
+
+  // ── All-day banner strip ──────────────────────────────────────────────
+  // Multi-day all-day events (e.g. a trip) render as ONE banner spanning the
+  // days across the top of the week — matching the 3-week and month views —
+  // instead of a separate chip inside each day column. Single-day all-day
+  // events also live in the strip as one-column banners. Birthdays keep
+  // their grouped pill inside the day column.
+  interface WeekBannerLayout {
+    ev: CalendarEvent
+    startCol: number
+    endCol: number
+    slot: number
+    isRealStart: boolean
+    isRealEnd: boolean
+  }
+  const weekBanners = useMemo(() => {
+    return weeks.map((week) => {
+      const weekDateKeys = week.map((d) => format(d, 'yyyy-MM-dd'))
+
+      const seen = new Set<string>()
+      const candidates: CalendarEvent[] = []
+      for (const dk of weekDateKeys) {
+        for (const ev of eventsByDate.get(dk) ?? []) {
+          if (ev.all_day && !isBirthdayEvent(ev) && !seen.has(ev.id)) {
+            seen.add(ev.id)
+            candidates.push(ev)
+          }
+        }
+      }
+      // Longer events first so short ones slot underneath, like the 3-week view.
+      candidates.sort((a, b) => {
+        const boundsA = getEventDateBounds(a)
+        const boundsB = getEventDateBounds(b)
+        const startDiff = boundsA.firstDay.localeCompare(boundsB.firstDay)
+        if (startDiff !== 0) return startDiff
+        if (boundsB.dates.length !== boundsA.dates.length) {
+          return boundsB.dates.length - boundsA.dates.length
+        }
+        return a.start_at.localeCompare(b.start_at)
+      })
+
+      const layouts: WeekBannerLayout[] = []
+      const slotOccupancies: boolean[][] = []
+      for (const ev of candidates) {
+        const bounds = getEventDateBounds(ev)
+        const cols: number[] = []
+        weekDateKeys.forEach((k, i) => {
+          if (bounds.dates.includes(k)) cols.push(i)
+        })
+        if (cols.length === 0) continue
+        const startCol = cols[0]
+        const endCol = cols[cols.length - 1]
+
+        let slot = 0
+        for (;;) {
+          const row = slotOccupancies[slot]
+          if (!row) break
+          let conflict = false
+          for (let c = startCol; c <= endCol; c++) {
+            if (row[c]) { conflict = true; break }
+          }
+          if (!conflict) break
+          slot++
+        }
+        if (!slotOccupancies[slot]) slotOccupancies[slot] = Array(7).fill(false)
+        for (let c = startCol; c <= endCol; c++) slotOccupancies[slot][c] = true
+
+        layouts.push({
+          ev,
+          startCol,
+          endCol,
+          slot,
+          isRealStart: weekDateKeys.includes(bounds.firstDay),
+          isRealEnd: weekDateKeys.includes(bounds.lastDay),
+        })
+      }
+      return { layouts, ids: seen }
+    })
+  }, [weeks, eventsByDate])
 
   useEffect(() => {
     const el = scrollRef.current
@@ -300,12 +379,28 @@ export const TimeGridView = memo(function TimeGridView({
           touchAction: 'pan-y',
         }}
       >
-        {weeks.map((week, wi) => (
+        {weeks.map((week, wi) => {
+          const banners = weekBanners[wi]
+          return (
           <div
             key={`week-${wi}`}
-            className="w-full min-w-full flex-shrink-0 grid grid-cols-7 divide-x divide-sand-200 h-full"
+            className="w-full min-w-full flex-shrink-0 flex flex-col h-full"
             style={{ scrollSnapAlign: 'start' }}
           >
+            {banners.layouts.length > 0 && (
+              <div className="flex-shrink-0 grid grid-cols-7 gap-y-1 px-1 pt-1.5 pb-2 border-b border-sand-200 bg-white">
+                {banners.layouts.map((layout) => (
+                  <WeekAllDayBanner
+                    key={layout.ev.id}
+                    layout={layout}
+                    colorRules={colorRules}
+                    calendars={calendars}
+                    onEventClick={onEventClick}
+                  />
+                ))}
+              </div>
+            )}
+            <div className="flex-1 min-h-0 grid grid-cols-7 divide-x divide-sand-200">
             {week.map((day) => {
               const key = format(day, 'yyyy-MM-dd')
               const isCurrentDay = isToday(day)
@@ -313,7 +408,9 @@ export const TimeGridView = memo(function TimeGridView({
 
               const dayAllDay = dayEvents.filter(e => e.all_day)
               const birthdayEvents = dayAllDay.filter(isBirthdayEvent)
-              const otherAllDay = dayAllDay.filter(ev => !isBirthdayEvent(ev))
+              // All non-birthday all-day events live in the banner strip above;
+              // anything left here is a fallback so nothing can go missing.
+              const otherAllDay = dayAllDay.filter(ev => !isBirthdayEvent(ev) && !banners.ids.has(ev.id))
 
               const nonAllDay = dayEvents.filter(e => !e.all_day)
               nonAllDay.sort((a, b) => a.start_at.localeCompare(b.start_at))
@@ -434,8 +531,10 @@ export const TimeGridView = memo(function TimeGridView({
                 </div>
               )
             })}
+            </div>
           </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
@@ -498,6 +597,57 @@ function BirthdayGroupPill({
       title={events.map(e => extractBirthdayName(e.title)).join(', ')}
     >
       🎂 {events.length} Birthdays
+    </div>
+  )
+}
+
+// One all-day banner in the week view's top strip. Multi-day events span
+// their columns as a single pill; square corners mark the edges where the
+// event continues into the neighboring week.
+function WeekAllDayBanner({
+  layout,
+  colorRules,
+  calendars,
+  onEventClick,
+}: {
+  layout: { ev: CalendarEvent; startCol: number; endCol: number; slot: number; isRealStart: boolean; isRealEnd: boolean }
+  colorRules?: import('@/features/settings/use-event-color-rules').EventColorRule[]
+  calendars?: import('./use-calendar').ConnectedCalendar[]
+  onEventClick?: (ev: CalendarEvent) => void
+}) {
+  const { ev, startCol, endCol, slot, isRealStart, isRealEnd } = layout
+  const calendar = calendars?.find(c =>
+    c.calendar_id === ev.source_calendar_id &&
+    (!ev.created_by || c.family_member_id === ev.created_by)
+  )
+  const calendarColor = calendar?.color
+  const ruleColor = applyColorRules(ev.title, colorRules)
+  const color = ruleColor ?? calendarColor ?? ev.color ?? '#5B7FB5'
+  const styles = getEventThemeStyles(color)
+
+  const roundedClass =
+    isRealStart && isRealEnd ? 'rounded-md'
+    : isRealStart ? 'rounded-l-md rounded-r-none'
+    : isRealEnd ? 'rounded-r-md rounded-l-none'
+    : 'rounded-none'
+
+  return (
+    <div
+      onClick={(e) => {
+        e.stopPropagation()
+        onEventClick?.(ev)
+      }}
+      className={`${roundedClass} px-2.5 py-1.5 text-[13.5px] font-bold truncate cursor-pointer hover:brightness-95 active:brightness-90 transition-all`}
+      style={{
+        gridColumn: `${startCol + 1} / ${endCol + 2}`,
+        gridRow: slot + 1,
+        backgroundColor: styles.backgroundColor,
+        color: styles.textColor,
+        borderLeft: isRealStart ? `4px solid ${styles.borderColor}` : undefined,
+      }}
+      title={ev.title}
+    >
+      {ev.title}
     </div>
   )
 }
