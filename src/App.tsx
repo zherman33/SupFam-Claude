@@ -15,6 +15,7 @@ import { UxDashboard } from '@/features/admin/ux-dashboard'
 
 import { SupportWidget } from '@/features/support/support-widget'
 import { openSettings } from '@/features/settings/settings-events'
+import { KioskView } from '@/features/kiosk/kiosk-view'
 
 export default function App() {
   const { user, loading } = useAuth()
@@ -30,6 +31,11 @@ export default function App() {
     () =>
       typeof window !== 'undefined' &&
       new URLSearchParams(window.location.search).get('view') === 'admin',
+  )
+  const [kioskView, setKioskView] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('view') === 'kiosk',
   )
 
   // ── Product telemetry: session usage (screen time) ──
@@ -138,6 +144,21 @@ export default function App() {
   // Subscription ended: clear paywall, never a broken app.
   if (subscription?.isPaywalled) {
     return wrap(<Paywall />)
+  }
+
+  // Kitchen kiosk (?view=kiosk): glanceable always-on dashboard for the
+  // Echo Show's Silk browser. Signed-in family only; never bypasses paywall.
+  if (kioskView) {
+    return (
+      <KioskView
+        onExit={() => {
+          setKioskView(false)
+          const u = new URL(window.location.href)
+          u.searchParams.delete('view')
+          window.history.replaceState({}, '', u.toString())
+        }}
+      />
+    )
   }
 
   return wrap(

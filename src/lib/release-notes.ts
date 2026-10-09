@@ -21,6 +21,14 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: 'v1.2.2',
+    date: 'Oct 8, 2026',
+    headline: 'New: a kitchen kiosk view for the big screen.',
+    notes: [
+      'Opening the app with ?view=kiosk now shows a big-type kitchen board — today\u2019s agenda, tonight\u2019s dinner, groceries, and tasks — made for an always-on display like the Echo Show.',
+    ],
+  },
+  {
     version: 'v1.2.1',
     date: 'Oct 6, 2026',
     headline: 'Calendar cleanup: no more double events.',
