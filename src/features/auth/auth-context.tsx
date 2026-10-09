@@ -17,6 +17,8 @@ interface AuthState {
   user: User | null
   loading: boolean
   signInWithGoogle: () => Promise<void>
+  signInWithEmail: (email: string) => Promise<void>
+  verifyEmailOtp: (email: string, token: string) => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -143,6 +145,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut()
   }
 
+  /**
+   * Passwordless email sign-in (OTP code). Used where Google OAuth shows
+   * scary warnings or is blocked — e.g. the Echo Show's Silk browser.
+   * Calendar access is connected separately in onboarding, so skipping
+   * Google here loses nothing.
+   */
+  const signInWithEmail = async (email: string) => {
+    const { error } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: { shouldCreateUser: true },
+    })
+    if (error) throw new Error(friendlyOtpError(error))
+  }
+
+  const verifyEmailOtp = async (email: string, token: string) => {
+    const { error } = await supabase.auth.verifyOtp({
+      email: email.trim(),
+      token: token.trim(),
+      type: 'email',
+    })
+    if (error) throw new Error(friendlyOtpError(error))
+    // SIGNED_IN fires via onAuthStateChange → session is set there.
+  }
+
   // If Chrome browser blocks automatic redirect when returning via web URL, provide a direct click button
   if (
     !Capacitor.isNativePlatform() &&
@@ -174,6 +200,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user: session?.user ?? null,
         loading,
         signInWithGoogle,
+        signInWithEmail,
+        verifyEmailOtp,
         signOut,
       }}
     >
@@ -188,6 +216,23 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider')
   }
   return context
+}
+
+/**
+ * Human-friendly messages for Supabase OTP errors (codes stay in the logs).
+ */
+function friendlyOtpError(error: { message: string; code?: string }): string {
+  const code = (error.code ?? '').toLowerCase()
+  if (code.includes('otp_expired') || code.includes('expired')) {
+    return 'That code expired — send a new one and try again.'
+  }
+  if (code.includes('otp_disabled')) {
+    return 'Email sign-in is turned off right now — try Continue with Google.'
+  }
+  if (error.message.toLowerCase().includes('rate limit')) {
+    return 'Too many tries — wait a minute, then try again.'
+  }
+  return "Hmm, that didn't work — check the code and try again."
 }
 
 /**

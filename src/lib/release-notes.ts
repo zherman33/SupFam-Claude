@@ -27,6 +27,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     notes: [
       'Opening the app with ?view=kiosk now shows a big-type kitchen board — today\u2019s agenda, tonight\u2019s dinner, groceries, and tasks — made for an always-on display like the Echo Show.',
       'People Zac refers can now join free: they enter a referral code during signup — $0, no card required.',
+      'New: sign in with an email code, not just Google — handy on screens like the Echo Show where Google sign-in shows warnings.',
     ],
   },
   {

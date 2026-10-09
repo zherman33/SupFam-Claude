@@ -494,6 +494,8 @@ export const supabase: any = {
     }),
     setSession: async () => ({ data: { session: fakeSession }, error: null }),
     signInWithOAuth: async () => ({ data: { url: null }, error: null }),
+    signInWithOtp: async () => ({ data: {}, error: null }),
+    verifyOtp: async () => ({ data: { session: fakeSession }, error: null }),
     signOut: async () => ({ error: null }),
     exchangeCodeForSession: async () => ({ data: { session: fakeSession }, error: null }),
   },
