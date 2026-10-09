@@ -23,9 +23,10 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     version: 'v1.2.2',
     date: 'Oct 8, 2026',
-    headline: 'New: a kitchen kiosk view for the big screen.',
+    headline: 'New: a kitchen kiosk view, plus a free plan.',
     notes: [
       'Opening the app with ?view=kiosk now shows a big-type kitchen board — today\u2019s agenda, tonight\u2019s dinner, groceries, and tasks — made for an always-on display like the Echo Show.',
+      'New families can now choose a Free plan: the full app, $0 forever, no card required. Paid plans still start with 30 days free.',
     ],
   },
   {

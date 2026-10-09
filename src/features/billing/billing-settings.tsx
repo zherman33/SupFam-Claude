@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useFamilyMember } from '@/features/auth/use-family-member'
 import { useSubscription, PLANS } from './use-subscription'
-import { openBillingPortal } from './checkout'
+import { openBillingPortal, startCheckout } from './checkout'
 
 /**
  * Billing settings: current plan, trial time left, renewal date,
  * and a doorway to Stripe's portal for card / plan / cancel changes.
  * Only the family admin can open the portal; members see read-only info.
+ * Free-plan families get an upgrade doorway instead (no Stripe customer yet).
  */
 export function BillingSettings() {
   const { data: member } = useFamilyMember()
@@ -16,6 +17,7 @@ export function BillingSettings() {
 
   if (!sub) return null
   const isAdmin = member?.role === 'admin'
+  const isFree = sub.status === 'free'
   const plan = sub.planId !== 'none' ? PLANS[sub.planId] : null
 
   const handlePortal = async () => {
@@ -23,6 +25,17 @@ export function BillingSettings() {
     setError('')
     try {
       await openBillingPortal()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Hmm, that didn't work — try again?")
+      setBusy(false)
+    }
+  }
+
+  const handleUpgrade = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      await startCheckout('annual') // redirects to Stripe; never returns
     } catch (e) {
       setError(e instanceof Error ? e.message : "Hmm, that didn't work — try again?")
       setBusy(false)
@@ -60,7 +73,9 @@ export function BillingSettings() {
                 ? 'Active'
                 : sub.status === 'past_due'
                   ? 'Payment issue'
-                  : sub.status}
+                  : sub.status === 'free'
+                    ? 'Free'
+                    : sub.status}
           </span>
         </div>
 
@@ -102,11 +117,11 @@ export function BillingSettings() {
         <div className="mt-4">
           {isAdmin ? (
             <button
-              onClick={handlePortal}
+              onClick={isFree ? handleUpgrade : handlePortal}
               disabled={busy}
               className="rounded-xl bg-brown-800 px-5 py-3 text-sm font-semibold text-cream-50 transition-colors hover:bg-brown-900 disabled:opacity-40"
             >
-              {busy ? 'Opening…' : 'Manage billing'}
+              {busy ? 'Opening…' : isFree ? 'Upgrade plan' : 'Manage billing'}
             </button>
           ) : (
             <p className="text-sm text-brown-700/50">
@@ -116,7 +131,9 @@ export function BillingSettings() {
         </div>
         {isAdmin && (
           <p className="mt-2 text-xs text-brown-700/40">
-            Update your card, switch plans, or cancel — handled securely by Stripe.
+            {isFree
+              ? 'Free forever · upgrade to a paid plan anytime.'
+              : 'Update your card, switch plans, or cancel — handled securely by Stripe.'}
           </p>
         )}
       </div>

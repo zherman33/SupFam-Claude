@@ -1,6 +1,6 @@
 import { useFamilyMember } from '@/features/auth/use-family-member'
 
-export type PlanId = 'none' | 'founding' | 'annual' | 'monthly'
+export type PlanId = 'none' | 'free' | 'founding' | 'annual' | 'monthly'
 export type SubscriptionStatus =
   | 'incomplete'
   | 'trialing'
@@ -9,11 +9,18 @@ export type SubscriptionStatus =
   | 'canceled'
   | 'unpaid'
   | 'expired'
+  | 'free'
 
 export const PLANS: Record<
   Exclude<PlanId, 'none'>,
   { label: string; price: string; cadence: string; blurb: string }
 > = {
+  free: {
+    label: 'Free',
+    price: '$0',
+    cadence: 'forever',
+    blurb: 'The full Sup Fam experience. No card required, no trial clock.',
+  },
   founding: {
     label: 'Founding',
     price: '$39',
@@ -53,7 +60,7 @@ export interface Subscription {
   planPriceLabel: string
 }
 
-const PRO_STATUSES: SubscriptionStatus[] = ['trialing', 'active', 'past_due']
+const PRO_STATUSES: SubscriptionStatus[] = ['trialing', 'active', 'past_due', 'free']
 
 export function useSubscription(): Subscription | null {
   const { data: member } = useFamilyMember()
