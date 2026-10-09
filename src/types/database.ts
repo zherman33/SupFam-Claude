@@ -716,10 +716,6 @@ export interface Database {
     }
     Views: Record<string, never>
     Functions: {
-      choose_free_plan: {
-        Args: Record<string, never>
-        Returns: { ok: boolean; error?: string; plan?: string } | null
-      }
       redeem_promo_code: {
         Args: { p_code: string }
         Returns: { ok: boolean; error?: string; plan?: string } | null

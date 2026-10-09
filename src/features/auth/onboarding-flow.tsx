@@ -265,7 +265,7 @@ function WelcomeStep({ onCreate, onJoin }: { onCreate: () => void; onJoin: () =>
           I have an invite code
         </button>
       </div>
-      <p className="mt-6 text-xs text-brown-700/40">Free forever plan available · paid plans start with 30 days free</p>
+      <p className="mt-6 text-xs text-brown-700/40">Free for 30 days · card required, cancel anytime</p>
     </div>
   )
 }
@@ -406,33 +406,12 @@ function PlanStep({ onBack }: { onBack: () => void }) {
   const [promoError, setPromoError] = useState('')
   const queryClient = useQueryClient()
 
-  const choose = async (plan: Exclude<PlanId, 'none' | 'free'>) => {
+  const choose = async (plan: Exclude<PlanId, 'none'>) => {
     setBusyPlan(plan)
     setError('')
     try {
       track('checkout_started', { plan }, { userId: user?.id })
       await startCheckout(plan) // redirects to Stripe
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Hmm, that didn't work — try again?")
-      setBusyPlan(null)
-    }
-  }
-
-  const chooseFree = async () => {
-    setBusyPlan('free')
-    setError('')
-    try {
-      track('free_plan_chosen', {}, { userId: user?.id })
-      const { data, error: rpcError } = await supabase.rpc('choose_free_plan')
-      if (rpcError) throw rpcError
-      const res = data as { ok: boolean; error?: string } | null
-      if (!res?.ok) {
-        setError(res?.error ?? "Hmm, that didn't work — try again?")
-        setBusyPlan(null)
-        return
-      }
-      // Refetch membership: status flips to free, onboarding advances past this step.
-      await queryClient.invalidateQueries({ queryKey: ['family-member'] })
     } catch (e) {
       setError(e instanceof Error ? e.message : "Hmm, that didn't work — try again?")
       setBusyPlan(null)
@@ -508,34 +487,9 @@ function PlanStep({ onBack }: { onBack: () => void }) {
           )
         })}
       </div>
-      {/* Free plan: no Stripe, no card — server stamps plan_id='free' via RPC. */}
-      <div className="mt-6">
-        <div className="flex items-center gap-3">
-          <div className="h-px flex-1 bg-sand-200" />
-          <span className="text-xs font-medium text-brown-700/40">or start free</span>
-          <div className="h-px flex-1 bg-sand-200" />
-        </div>
-        <button
-          onClick={chooseFree}
-          disabled={busyPlan !== null}
-          className="mt-3 w-full rounded-2xl bg-cream-50 p-5 text-left shadow-sm ring-1 ring-sage-300/60 transition-colors hover:bg-cream-100 active:bg-cream-100 disabled:opacity-60"
-        >
-          <div className="flex items-baseline justify-between">
-            <p className="font-semibold text-brown-800">{PLANS.free.label}</p>
-            <p className="font-display text-2xl text-brown-800">
-              {PLANS.free.price}
-              <span className="text-sm font-normal text-brown-700/50">{PLANS.free.cadence}</span>
-            </p>
-          </div>
-          <p className="mt-1 text-sm text-brown-700/55">{PLANS.free.blurb}</p>
-          <p className="mt-3 text-sm font-semibold text-terracotta-600">
-            {busyPlan === 'free' ? 'Setting you up…' : 'Start free →'}
-          </p>
-        </button>
-      </div>
       {error && <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
       <p className="mt-4 text-center text-xs text-brown-700/40">
-        Paid plans need a card upfront · cancel anytime · annual plans are $0 today
+        Card required upfront · cancel anytime · annual plans are $0 today
       </p>
       <div className="mt-3 text-center">
         {!showPromo ? (
