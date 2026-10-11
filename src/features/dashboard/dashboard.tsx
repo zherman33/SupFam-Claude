@@ -5,8 +5,7 @@ import { SettingsPanel, type SettingsGroup } from '@/features/settings/settings-
 import { openSettings, openSupportDialog } from '@/features/settings/settings-events'
 import { useFamilyMember } from '@/features/auth/use-family-member'
 import { CalendarView, type CalendarMode } from '@/features/calendar/calendar-view'
-import { TaskBar } from '@/features/tasks/task-bar'
-import { TaskSidebar } from '@/features/tasks/task-sidebar'
+import { BoardsDock } from '@/features/dashboard/boards-dock'
 import { GroceryPanel } from '@/features/grocery/grocery-panel'
 import { NotesPanel } from '@/features/notes/notes-panel'
 import { DinnerBoard } from '@/features/meals/dinner-board'
@@ -26,7 +25,6 @@ export function Dashboard() {
   const syncTasks = useSyncTasks()
   const toggleVisibility = useToggleCalendarVisibility()
 
-  const [sidebarExpanded, setSidebarExpanded] = useState(false)
   const [mode, setMode] = useState<CalendarMode>(() => {
     const saved = localStorage.getItem('family-planner-calendar-mode')
     return (saved === 'month' || saved === '3week' || saved === 'week') ? saved : '3week'
@@ -350,15 +348,8 @@ export function Dashboard() {
         />
       )}
 
-      {/* ── Main: task sidebar + calendar + optional right drawer ── */}
-      <div className={`flex flex-1 min-h-0 gap-3 p-3 ${sidebarExpanded ? 'pb-safe' : 'pb-0'}`}>
-        {/* Task sidebar — shown only when expanded */}
-        {sidebarExpanded && (
-          <div className="w-72 flex-shrink-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-sand-200/60">
-            <TaskSidebar events={visibleEvents} onCollapse={() => setSidebarExpanded(false)} onSelectTask={setEditingTask} />
-          </div>
-        )}
-
+      {/* ── Main: the calendar, front and center ── */}
+      <div className="flex flex-1 min-h-0 gap-3 p-3 pb-0">
         <div className="flex-1 min-w-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-sand-200/60 p-4">
           <CalendarView
             tasks={tasks}
@@ -415,12 +406,8 @@ export function Dashboard() {
         )}
       </div>
 
-      {/* ── Task bar — only when sidebar is collapsed ── */}
-      {!sidebarExpanded && (
-        <div className="mx-3 mt-3 mb-safe flex-shrink-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-sand-200/60">
-          <TaskBar onExpand={() => setSidebarExpanded(true)} onSelectTask={setEditingTask} />
-        </div>
-      )}
+      {/* ── Boards dock: tasks, dinner, groceries — collapsed, expanding in place ── */}
+      <BoardsDock onSelectTask={setEditingTask} onOpenDinner={() => setBoardOpen(true)} />
 
       {editingTask && (
         <TaskForm task={editingTask} onClose={() => setEditingTask(null)} />
