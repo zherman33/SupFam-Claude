@@ -8,12 +8,14 @@ import { initFontSize } from '@/features/settings/font-size-utils'
 import { Dashboard } from '@/features/dashboard/dashboard'
 import { DinnerBoard } from '@/features/meals/dinner-board'
 import { DinnerAiTab } from '@/features/settings/dinner-ai-tab'
+import { KioskView } from '@/features/kiosk/kiosk-view'
 import '../index.css'
 
 initFontSize()
 
 // Allow ?view=week|3week|month to preset the calendar mode for screenshots,
-// or ?view=dinner to open the dinner board directly.
+// ?view=dinner to open the dinner board directly, or ?view=kiosk to render
+// the kitchen kiosk board with sample data.
 const params = new URLSearchParams(window.location.search)
 const previewView = params.get('view')
 try {
@@ -25,7 +27,9 @@ try {
 const Root =
   previewView === 'dinner'
     ? () => <DinnerBoard onClose={() => {}} />
-    : previewView === 'dinner-ai'
+    : previewView === 'kiosk'
+      ? () => <KioskView onExit={() => {}} />
+      : previewView === 'dinner-ai'
       ? () => (
           <div className="min-h-screen bg-cream-50 p-6">
             <div className="mx-auto max-w-2xl rounded-3xl bg-white p-6 shadow-sm ring-1 ring-sand-200/60">

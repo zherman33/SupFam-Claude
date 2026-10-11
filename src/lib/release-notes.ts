@@ -21,6 +21,15 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: 'v1.2.3',
+    date: 'Oct 11, 2026',
+    headline: 'The kiosk board now turns vertical for tall displays.',
+    notes: [
+      'Opening the app with ?view=kiosk on an upright display — like an ApoloSign rotated to portrait — now shows a vertical board: clock, today\u2019s agenda, tonight\u2019s dinner, groceries, and tasks in one flowing column, no scrolling needed.',
+      'The board also asks the display to stay awake while it\u2019s showing, so an always-on screen doesn\u2019t dim mid-day.',
+    ],
+  },
+  {
     version: 'v1.2.2',
     date: 'Oct 8, 2026',
     headline: 'New: a kitchen kiosk view, plus a free plan.',

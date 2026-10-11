@@ -15,9 +15,17 @@ import { useTodayTasks } from '@/features/tasks/use-tasks'
  * audio element (inaudible, muted-autoplay allowed without a gesture) that
  * convinces Silk media is playing and the page is "in use".
  * See: DaGammla/keep-silk-open.
+ *
+ * It also ships a portrait layout: when the display is taller than it is
+ * wide (e.g. an ApoloSign rotated upright), the board automatically stacks
+ * into a vertical arrangement sized for a tall sign — no scrolling, no
+ * pinch-zoom. A screen wake lock request keeps always-on signage from
+ * dimming while the board is showing.
  */
 export function KioskView({ onExit }: { onExit: () => void }) {
   useSilkKeepAlive()
+  useScreenWakeLock()
+  const portrait = usePortrait()
   const now = useNow(15_000)
   const todayISO = toISODate(now)
   const todayIdx = (now.getDay() + 6) % 7 // 0 = Monday, matches meal day_index
@@ -54,6 +62,36 @@ export function KioskView({ onExit }: { onExit: () => void }) {
     }
   }, [])
 
+  const data: KioskData = {
+    now,
+    todaysEvents,
+    tonight,
+    groceriesLoaded: groceries !== undefined,
+    openGroceries,
+    tasksLoaded: tasks !== undefined,
+    openTasks,
+    mealsLoaded: mealData !== undefined,
+    onExit,
+  }
+
+  return portrait ? <KioskPortrait {...data} /> : <KioskLandscape {...data} />
+}
+
+interface KioskData {
+  now: Date
+  todaysEvents: CalendarEvent[] | undefined
+  tonight: { title: string } | undefined
+  groceriesLoaded: boolean
+  openGroceries: { id: string; title: string }[]
+  tasksLoaded: boolean
+  openTasks: { id: string; title: string }[]
+  mealsLoaded: boolean
+  onExit: () => void
+}
+
+/** Landscape board — the original kitchen layout for wide screens (Echo Show). */
+function KioskLandscape(d: KioskData) {
+  const { now, todaysEvents, tonight, groceriesLoaded, openGroceries, tasksLoaded, openTasks, mealsLoaded, onExit } = d
   return (
     <div className="min-h-svh bg-cream-100 text-brown-800 flex flex-col p-8 lg:p-12">
       {/* Header: clock + date */}
@@ -103,7 +141,7 @@ export function KioskView({ onExit }: { onExit: () => void }) {
           {/* Tonight */}
           <div>
             <SectionTitle>Tonight</SectionTitle>
-            {mealData === undefined ? (
+            {mealsLoaded === false ? (
               <KioskSkeleton rows={2} />
             ) : tonight ? (
               <div className="rounded-2xl bg-terracotta-500 text-cream-50 p-6">
@@ -125,7 +163,7 @@ export function KioskView({ onExit }: { onExit: () => void }) {
                 </span>
               )}
             </SectionTitle>
-            {groceries === undefined ? (
+            {groceriesLoaded === false ? (
               <KioskSkeleton rows={3} />
             ) : openGroceries.length === 0 ? (
               <p className="text-xl text-brown-700/40">List is clear.</p>
@@ -154,7 +192,7 @@ export function KioskView({ onExit }: { onExit: () => void }) {
                 </span>
               )}
             </SectionTitle>
-            {tasks === undefined ? (
+            {tasksLoaded === false ? (
               <KioskSkeleton rows={3} />
             ) : openTasks.length === 0 ? (
               <p className="text-xl text-brown-700/40">All done.</p>
@@ -190,6 +228,147 @@ export function KioskView({ onExit }: { onExit: () => void }) {
   )
 }
 
+/**
+ * Portrait board — for tall upright displays like an ApoloSign rotated to
+ * vertical. Single flowing column, item caps chosen to fill a 9:16 screen
+ * (1080×1920) with no scrolling: clock, today's agenda, dinner, groceries,
+ * tasks — everything glanceable from across the room.
+ */
+function KioskPortrait(d: KioskData) {
+  const { now, todaysEvents, tonight, groceriesLoaded, openGroceries, tasksLoaded, openTasks, mealsLoaded, onExit } = d
+  return (
+    <div className="min-h-svh bg-cream-100 text-brown-800 flex flex-col px-6 py-6">
+      {/* Header: compact clock */}
+      <header className="flex items-end justify-between border-b-2 border-sand-200 pb-5">
+        <div>
+          <p className="font-display text-7xl leading-none tabular-nums">
+            {format(now, 'h:mm')}
+            <span className="text-4xl text-brown-700/50 ml-2">{format(now, 'a')}</span>
+          </p>
+          <p className="mt-2 font-handwritten text-3xl text-terracotta-500">
+            {format(now, 'EEEE, MMMM d')}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="font-display text-3xl">Sup Fam</p>
+          <p className="text-sm text-brown-700/50">the vertical board</p>
+        </div>
+      </header>
+
+      {/* Stacked board */}
+      <main className="flex-1 flex flex-col gap-8 pt-6 min-h-0 overflow-hidden">
+        {/* Today */}
+        <section className="flex flex-col min-h-0">
+          <SectionTitle>Today</SectionTitle>
+          <div className="overflow-hidden">
+            {todaysEvents === undefined ? (
+              <KioskSkeleton rows={4} />
+            ) : todaysEvents.length === 0 ? (
+              <p className="text-2xl text-brown-700/40 py-6">Nothing on the calendar — open day.</p>
+            ) : (
+              <ul className="space-y-4">
+                {todaysEvents.slice(0, 6).map((ev) => (
+                  <EventRow key={ev.id} event={ev} now={now} />
+                ))}
+                {todaysEvents.length > 6 && (
+                  <li className="text-xl text-brown-700/50">
+                    + {todaysEvents.length - 6} more on the calendar
+                  </li>
+                )}
+              </ul>
+            )}
+          </div>
+        </section>
+
+        {/* Tonight */}
+        <section>
+          <SectionTitle>Tonight</SectionTitle>
+          {mealsLoaded === false ? (
+            <KioskSkeleton rows={2} />
+          ) : tonight ? (
+            <div className="rounded-2xl bg-terracotta-500 text-cream-50 p-6">
+              <p className="text-xs font-semibold uppercase tracking-widest opacity-80">Dinner</p>
+              <p className="mt-1 font-display text-4xl leading-tight">{tonight.title}</p>
+            </div>
+          ) : (
+            <p className="text-2xl text-brown-700/40">No dinner planned yet.</p>
+          )}
+        </section>
+
+        {/* Groceries */}
+        <section>
+          <SectionTitle>
+            Groceries
+            {openGroceries.length > 0 && (
+              <span className="ml-2 rounded-full bg-sand-200 px-3 py-1 text-lg font-semibold">
+                {openGroceries.length}
+              </span>
+            )}
+          </SectionTitle>
+          {groceriesLoaded === false ? (
+            <KioskSkeleton rows={3} />
+          ) : openGroceries.length === 0 ? (
+            <p className="text-2xl text-brown-700/40">List is clear.</p>
+          ) : (
+            <ul className="space-y-2.5">
+              {openGroceries.slice(0, 6).map((g) => (
+                <li key={g.id} className="flex items-center gap-3 text-2xl">
+                  <span className="inline-block h-5 w-5 shrink-0 rounded-md border-2 border-sand-300" />
+                  <span className="truncate">{g.title}</span>
+                </li>
+              ))}
+              {openGroceries.length > 6 && (
+                <li className="text-xl text-brown-700/50">+ {openGroceries.length - 6} more</li>
+              )}
+            </ul>
+          )}
+        </section>
+
+        {/* Tasks */}
+        <section className="flex-1 min-h-0 overflow-hidden">
+          <SectionTitle>
+            Tasks
+            {openTasks.length > 0 && (
+              <span className="ml-2 rounded-full bg-sand-200 px-3 py-1 text-lg font-semibold">
+                {openTasks.length}
+              </span>
+            )}
+          </SectionTitle>
+          {tasksLoaded === false ? (
+            <KioskSkeleton rows={3} />
+          ) : openTasks.length === 0 ? (
+            <p className="text-2xl text-brown-700/40">All done.</p>
+          ) : (
+            <ul className="space-y-2.5">
+              {openTasks.slice(0, 6).map((t) => (
+                <li key={t.id} className="flex items-center gap-3 text-2xl">
+                  <span className="inline-block h-5 w-5 shrink-0 rounded-full border-2 border-sand-300" />
+                  <span className="truncate">{t.title}</span>
+                </li>
+              ))}
+              {openTasks.length > 6 && (
+                <li className="text-xl text-brown-700/50">+ {openTasks.length - 6} more</li>
+              )}
+            </ul>
+          )}
+        </section>
+      </main>
+
+      {/* Footer */}
+      <footer className="flex items-center justify-between pt-4 text-xs text-brown-700/40">
+        <p>Auto-refreshes · {format(now, 'h:mm a')}</p>
+        <button
+          type="button"
+          onClick={onExit}
+          className="rounded-full border border-sand-300 px-3 py-1.5 hover:bg-sand-100 transition-colors"
+        >
+          Exit kiosk
+        </button>
+      </footer>
+    </div>
+  )
+}
+
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.2em] text-brown-700/50">
@@ -206,19 +385,19 @@ function EventRow({ event, now }: { event: CalendarEvent; now: Date }) {
 
   return (
     <li
-      className={`flex items-baseline gap-5 rounded-2xl px-5 py-4 ${
+      className={`flex items-baseline gap-4 rounded-2xl px-5 py-4 ${
         isNow ? 'bg-terracotta-500 text-cream-50' : 'bg-cream-50 border border-sand-200'
       }`}
     >
       <span
-        className={`w-36 shrink-0 text-xl font-semibold tabular-nums ${
+        className={`shrink-0 font-semibold tabular-nums w-36 text-xl ${
           isNow ? 'text-cream-50' : 'text-terracotta-600'
         }`}
       >
         {event.all_day ? 'All day' : format(start, 'h:mm a')}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-2xl font-medium">{event.title}</span>
+        <span className={`block truncate font-medium text-2xl`}>{event.title}</span>
         {event.location && (
           <span
             className={`block truncate text-lg ${isNow ? 'text-cream-50/80' : 'text-brown-700/50'}`}
@@ -238,7 +417,7 @@ function EventRow({ event, now }: { event: CalendarEvent; now: Date }) {
         </span>
       )}
       {isToday(start) && event.all_day && (
-        <span className="shrink-0 text-lg text-brown-700/40">all-day</span>
+        <span className={`shrink-0 text-brown-700/40 text-lg`}>all-day</span>
       )}
     </li>
   )
@@ -262,6 +441,52 @@ function useNow(intervalMs: number): Date {
     return () => window.clearInterval(id)
   }, [intervalMs])
   return now
+}
+
+/** True when the viewport is taller than it is wide (upright signage). */
+function usePortrait(): boolean {
+  const query = () => window.matchMedia('(orientation: portrait)').matches
+  const [portrait, setPortrait] = useState(query)
+  useEffect(() => {
+    const mq = window.matchMedia('(orientation: portrait)')
+    const onChange = () => setPortrait(mq.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  return portrait
+}
+
+/**
+ * Asks an always-on display not to dim or sleep while the board is showing.
+ * Supported on Chromium-based browsers (Android Chrome on signage panels);
+ * silently ignored everywhere else.
+ */
+function useScreenWakeLock() {
+  useEffect(() => {
+    let sentinel: { release: () => Promise<void> } | null = null
+    let cancelled = false
+    const nav = navigator as Navigator & {
+      wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> }
+    }
+    const acquire = async () => {
+      try {
+        if (!nav.wakeLock || cancelled) return
+        sentinel = await nav.wakeLock.request('screen')
+      } catch {
+        // Not supported, denied, or lost — the board works fine without it.
+      }
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible' && !sentinel) acquire()
+    }
+    acquire()
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', onVisibility)
+      sentinel?.release().catch(() => {})
+    }
+  }, [])
 }
 
 /**
