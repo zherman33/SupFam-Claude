@@ -82,11 +82,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.location.href = 'com.supfam.app://auth' + window.location.search + window.location.hash
     }
 
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setLoading(false)
-    })
+    // Get initial session — the catch matters: if getSession rejects
+    // (corrupt stored session, storage failure), loading must still clear
+    // or the app hangs on the splash forever with no way to sign in again.
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        setSession(session)
+      })
+      .catch(() => {
+        setSession(null)
+      })
+      .finally(() => {
+        setLoading(false)
+      })
 
     // Listen for auth changes
     const {

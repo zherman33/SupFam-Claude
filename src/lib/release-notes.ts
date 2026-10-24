@@ -26,6 +26,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     headline: 'The dashboard lists are back out in the open.',
     notes: [
       'The collapsed rows under the calendar are gone — tasks are back as the bar along the bottom, expanding into the sidebar, and dinner and groceries open as their own boards again.',
+      'Fixed a hang where a bad saved sign-in could leave the app stuck on "Loading…" — it now falls through to the sign-in screen instead.',
     ],
   },
   {
