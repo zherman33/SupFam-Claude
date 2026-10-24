@@ -21,6 +21,14 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: 'v1.2.4',
+    date: 'Oct 24, 2026',
+    headline: 'The dashboard lists are back out in the open.',
+    notes: [
+      'The collapsed rows under the calendar are gone — tasks are back as the bar along the bottom, expanding into the sidebar, and dinner and groceries open as their own boards again.',
+    ],
+  },
+  {
     version: 'v1.2.3',
     date: 'Oct 11, 2026',
     headline: 'Vertical kiosk board, and a calmer main dashboard.',

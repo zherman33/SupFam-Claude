@@ -22,11 +22,6 @@ try {
   if (previewView === 'week' || previewView === '3week' || previewView === 'month') {
     localStorage.setItem('family-planner-calendar-mode', previewView)
   }
-  // ?dock=tasks|dinner|groceries — pre-expand one boards-dock row for screenshots
-  const dockPreset = params.get('dock')
-  if (dockPreset === 'tasks' || dockPreset === 'dinner' || dockPreset === 'groceries') {
-    localStorage.setItem('supfam-dock-open', dockPreset)
-  }
 } catch { /* noop */ }
 
 const Root =
