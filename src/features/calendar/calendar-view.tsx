@@ -17,6 +17,7 @@ import {
   type EventDateBounds,
 } from './use-calendar'
 import { useEventColorRules, applyColorRules, type EventColorRule } from '@/features/settings/use-event-color-rules'
+import { useTheme } from '@/features/settings/theme-context'
 import { EventForm } from './event-form'
 import { TimeGridView } from './time-grid-view'
 
@@ -71,6 +72,8 @@ export function CalendarView({
     return () => clearInterval(interval)
   }, [])
   const anchor = anchorDate ?? today
+  const { theme } = useTheme()
+  const isPaper = theme === 'emilias-paper'
   const { data: colorRules } = useEventColorRules()
   const { data: connectedCalendars } = useConnectedCalendars()
   const toggleVisibility = useToggleCalendarVisibility()
@@ -325,7 +328,9 @@ export function CalendarView({
     return { eventsByDate: evMap, eventBoundsMap: boundsMap }
   }, [events])
 
-  const DAY_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  const DAY_HEADERS = isPaper
+    ? ['Sun.', 'Mon.', 'Tues.', 'Wed.', 'Thurs.', 'Fri.', 'Sat.']
+    : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   const todayDow = today.getDay() // 0 = Sun … 6 = Sat
 
   return (
@@ -337,7 +342,7 @@ export function CalendarView({
         onClose={() => { setFormDate(null); setEditEvent(null) }}
       />
     )}
-    <div className="flex h-full flex-col select-none overflow-hidden">
+    <div className={`flex h-full flex-col select-none overflow-hidden ${isPaper ? 'paper-calendar font-paper' : ''}`}>
 
       {/* ── Header ── */}
       <div className="relative flex-shrink-0 flex items-center h-9 mb-2 z-50">
@@ -378,7 +383,7 @@ export function CalendarView({
             onClick={handleManualRefresh}
             disabled={(!onRefresh && !onSyncRange) || isRefreshing}
           >
-            <span className="font-body text-base font-semibold text-brown-800 tracking-tight">
+            <span className={`${isPaper ? 'font-paper text-2xl uppercase tracking-wide' : 'font-body text-base font-semibold tracking-tight'} text-brown-800`}>
               {monthLabel}
             </span>
             {isRefreshing && (
@@ -445,12 +450,16 @@ export function CalendarView({
             {DAY_HEADERS.map((d, i) => (
               <div
                 key={d}
-                className={`text-center font-semibold uppercase tracking-widest ${
-                  mode === 'month' ? 'text-[0.6875rem]' : mode === '3week' ? 'text-xs' : 'text-[0.8125rem]'
-                } ${
-                  i === todayDow
-                    ? 'text-terracotta-500'
-                    : i === 0 || i === 6 ? 'text-brown-700/35' : 'text-brown-700/60'
+                className={`text-center uppercase tracking-widest ${
+                  isPaper
+                    ? 'text-[0.9375rem] text-brown-800'
+                    : `font-semibold ${
+                        mode === 'month' ? 'text-[0.6875rem]' : mode === '3week' ? 'text-xs' : 'text-[0.8125rem]'
+                      } ${
+                        i === todayDow
+                          ? 'text-terracotta-500'
+                          : i === 0 || i === 6 ? 'text-brown-700/35' : 'text-brown-700/60'
+                      }`
                 }`}
               >
                 {d}
@@ -681,6 +690,8 @@ const DayCell = memo(function DayCell({
   onSelectTask,
 }: DayCellProps) {
   const handleClick = useCallback(() => onDayClick(day), [onDayClick, day])
+  const { theme } = useTheme()
+  const isPaper = theme === 'emilias-paper'
 
   const dayBannerSlots: (CalendarEvent | null)[] = Array(totalBannerSlots).fill(null)
   for (const ev of dayEvents) {
@@ -711,14 +722,20 @@ const DayCell = memo(function DayCell({
   return (
     <div
       className={`relative flex flex-col border-r border-sand-100 last:border-r-0 overflow-hidden min-h-0 cursor-pointer
-        ${isWeekend && !isCurrentDay ? 'bg-[#faf8f5]' : 'bg-white'}
-        ${isCurrentDay ? (mode === 'month' ? 'bg-terracotta-500/[0.05]' : 'bg-terracotta-500/[0.07]') : ''}
+        ${isPaper ? 'bg-white' : isWeekend && !isCurrentDay ? 'bg-[#faf8f5]' : 'bg-white'}
+        ${!isPaper && isCurrentDay ? (mode === 'month' ? 'bg-terracotta-500/[0.05]' : 'bg-terracotta-500/[0.07]') : ''}
       `}
       onClick={handleClick}
     >
       <div className={`flex flex-col h-full ${mode === 'month' ? 'p-1.5 gap-px' : 'p-2 gap-1'}`}>
-        <div className="flex-shrink-0 mb-0.5 flex items-center gap-1.5">
-          {isCurrentDay ? (
+        <div className={`flex-shrink-0 mb-0.5 flex items-center gap-1.5 ${isPaper ? 'justify-end' : ''}`}>
+          {isPaper ? (
+            <span className={`inline-flex items-center justify-center leading-none text-brown-800 ${
+              isCurrentDay ? 'rounded-full border-2 border-brown-800 h-7 w-7 text-base' : 'text-base'
+            }`}>
+              {format(day, 'd')}
+            </span>
+          ) : isCurrentDay ? (
             <span className={`inline-flex items-center justify-center rounded-full bg-terracotta-500 text-white font-bold leading-none shadow-md ring-4 ring-terracotta-500/15 ${
               mode === 'month' ? 'h-6 w-6 text-xs' : 'h-8 w-8 text-sm'
             }`}>
@@ -907,6 +924,8 @@ function EventPill({
   const ruleColor = applyColorRules(ev.title, colorRules)
   const color = ruleColor ?? calColor ?? ev.color ?? '#5B7FB5'
   const textColor = darkenForReadability(color)
+  const { theme } = useTheme()
+  const isPaper = theme === 'emilias-paper'
 
   const timeStr = !ev.all_day ? formatTimeShort(ev.start_at) : null
   const showTime = !!timeStr && (!isBanner || isStart)
@@ -914,11 +933,48 @@ function EventPill({
 
   const barWidth = mode === 'month' ? 'w-[0.1875rem]' : mode === '3week' ? 'w-1' : 'w-1.5'
   const padding = mode === 'month' ? 'px-1 py-px' : mode === '3week' ? 'px-1.5 py-1' : 'px-2 py-1.5'
-  const textSize = mode === 'month'
+  const textSize = isPaper
+    ? mode === 'month'
+      ? 'text-[0.8125rem] leading-snug'
+      : mode === '3week'
+      ? 'text-[0.9375rem] leading-snug'
+      : 'text-[1rem] leading-snug'
+    : mode === 'month'
     ? 'text-[0.625rem] font-medium leading-snug'
     : mode === '3week'
     ? 'text-[0.84375rem] font-semibold leading-snug'
     : 'text-[0.9375rem] font-semibold leading-snug'
+
+  // Paper theme: highlighter wash instead of a pill. A banner continuation
+  // (multi-day trip) renders as Emilia's arrow, like "Zac Texas →" in her
+  // paper calendar, rather than a blank pill.
+  if (isPaper) {
+    const highlight = `linear-gradient(transparent 10%, ${color}66 16%, ${color}66 84%, transparent 90%)`
+    return (
+      <div
+        className="flex items-stretch overflow-hidden flex-shrink-0 cursor-pointer active:opacity-70 transition-opacity"
+        style={{ background: highlight }}
+        title={ev.title}
+        onClick={e => { e.stopPropagation(); onSelect?.(ev) }}
+      >
+        <div className={`flex items-center ${padding} min-w-0 flex-1`}>
+          <span className={`truncate uppercase ${textSize}`} style={{ color: '#1E1E1E' }}>
+            {isBanner && !showTitle ? (
+              '→'
+            ) : showTitle ? (
+              <>
+                {showTime && <span>{timeStr} </span>}
+                {displayTitle}
+                {isBanner && !isEnd ? ' →' : ''}
+              </>
+            ) : (
+              '\u00A0'
+            )}
+          </span>
+        </div>
+      </div>
+    )
+  }
 
   const negMarginLeft = isBanner && !isStart ? (mode === 'month' ? '-7px' : '-9px') : undefined
   const negMarginRight = isBanner && !isEnd ? (mode === 'month' ? '-7px' : '-9px') : undefined
@@ -997,14 +1053,37 @@ function TaskPill({
   onSelect?: (task: Task) => void
 }) {
   const color = task.assigned_member?.avatar_color ?? '#C4714F'
+  const { theme } = useTheme()
+  const isPaper = theme === 'emilias-paper'
   const barWidth = mode === 'month' ? 'w-[0.1875rem]' : mode === '3week' ? 'w-1' : 'w-1.5'
   const padding = mode === 'month' ? 'px-1 py-px' : mode === '3week' ? 'px-1.5 py-1' : 'px-2 py-1.5'
   const checkSize = mode === 'month' ? 'text-[0.625rem]' : mode === '3week' ? 'text-[0.75rem]' : 'text-[0.875rem]'
-  const textSize = mode === 'month'
+  const textSize = isPaper
+    ? mode === 'month'
+      ? 'text-[0.8125rem] leading-snug'
+      : 'text-[0.9375rem] leading-snug'
+    : mode === 'month'
     ? 'text-[0.75rem] font-medium leading-snug'
     : mode === '3week'
     ? 'text-[0.84375rem] font-semibold leading-snug'
     : 'text-[0.9375rem] font-semibold leading-snug'
+
+  if (isPaper) {
+    return (
+      <div
+        onClick={onSelect ? e => { e.stopPropagation(); onSelect(task) } : undefined}
+        className={`flex items-stretch overflow-hidden flex-shrink-0 ${onSelect ? 'cursor-pointer active:opacity-70 transition-opacity' : ''}`}
+        title={task.title}
+      >
+        <div className={`flex items-center gap-1 ${padding} min-w-0`}>
+          <span className={`${checkSize} flex-shrink-0`} style={{ color }}>✓</span>
+          <span className={`truncate uppercase ${textSize}`} style={{ color: '#1E1E1E' }}>
+            {task.title}
+          </span>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div

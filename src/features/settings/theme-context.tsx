@@ -8,6 +8,7 @@ export type ThemeId =
   | 'midnight-slate'
   | 'sunset-glow'
   | 'neon-synth'
+  | 'emilias-paper'
 
 export interface ThemeConfig {
   id: ThemeId
@@ -97,6 +98,17 @@ export const THEMES: ThemeConfig[] = [
       bg: '#121620',
       text: '#E5F8FF',
       accent: '#FF007F',
+    },
+  },
+  {
+    id: 'emilias-paper',
+    name: "Emilia's Paper",
+    description: 'Handwritten paper calendar — ink, highlighter, and a hand-drawn grid',
+    metaThemeColor: '#FDFCF7',
+    previewColors: {
+      bg: '#FDFCF7',
+      text: '#1E1E1E',
+      accent: '#2E7DD1',
     },
   },
 ]

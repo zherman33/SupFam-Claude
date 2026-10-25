@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Caveat:wght@400;600&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@400;500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Caveat:wght@400;600&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@400;500;600&family=Patrick+Hand&display=swap");
 @import "tailwindcss";
 
 /* Safe area utilities for iPhone notch, home indicator, and Android status bar.
@@ -46,6 +46,7 @@
   /* Fonts */
   --font-display: "Instrument Serif", serif;
   --font-handwritten: "Caveat", cursive;
+  --font-paper: "Patrick Hand", cursive;
   --font-body: "DM Sans", sans-serif;
 
   /* Radius */
@@ -407,10 +408,70 @@
   --color-cal-7-text: #132100;
 }
 
+/* 8. Emilia's Paper (Handwritten kitchen calendar) */
+:root[data-theme="emilias-paper"] {
+  --color-cream-50: #FDFCF7;
+  --color-cream-100: #FCFAF3;
+  --color-cream-200: #F5F0E2;
+  --color-cream-300: #E8E1CE;
+
+  --color-terracotta-400: #3A3A3A;
+  --color-terracotta-500: #1E1E1E;
+  --color-terracotta-600: #111111;
+
+  --color-sand-100: #EDE7D6;
+  --color-sand-200: #DDD5BE;
+  --color-sand-300: #CFC5A8;
+  --color-sand-400: #B8AC8C;
+
+  --color-sage-300: #9AB08A;
+  --color-sage-400: #7A9A6A;
+
+  --color-brown-700: #2A2A2A;
+  --color-brown-800: #1E1E1E;
+  --color-brown-900: #111111;
+
+  --color-family-zac: #58B368;
+  --color-family-zac-text: #1E1E1E;
+  --color-family-partner: #2E7DD1;
+  --color-family-partner-text: #1E1E1E;
+  --color-family-shared: #E85D9E;
+  --color-family-shared-text: #1E1E1E;
+  --color-family-child: #8B6BAE;
+  --color-family-child-text: #1E1E1E;
+
+  /* Calendar slots become highlighter colours, not pill colours */
+  --color-cal-1: #E85D9E;
+  --color-cal-1-text: #1E1E1E;
+  --color-cal-2: #58B368;
+  --color-cal-2-text: #1E1E1E;
+  --color-cal-3: #2E7DD1;
+  --color-cal-3-text: #1E1E1E;
+  --color-cal-4: #8B6BAE;
+  --color-cal-4-text: #1E1E1E;
+  --color-cal-5: #D94F7A;
+  --color-cal-5-text: #1E1E1E;
+  --color-cal-6: #E8A317;
+  --color-cal-6-text: #1E1E1E;
+  --color-cal-7: #6E7A8A;
+  --color-cal-7-text: #1E1E1E;
+}
+
 /* In dark modes, rewrite .bg-white utilities to render correct dark card backgrounds */
 :root[data-theme="midnight-slate"] .bg-white,
 :root[data-theme="neon-synth"] .bg-white {
   background-color: #1B1E24 !important;
+}
+
+/* Emilia's Paper: cards stay paper-white, and the calendar grid turns ink-black */
+:root[data-theme="emilias-paper"] .bg-white {
+  background-color: #FDFCF7 !important;
+}
+.paper-calendar .border-sand-100 {
+  border-color: #1E1E1E !important;
+}
+.paper-calendar {
+  font-family: var(--font-paper);
 }
 
 /* Base styles */
