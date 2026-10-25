@@ -28,6 +28,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       'If the saved sign-in takes too long to read, the app now falls through to the sign-in screen after 8 seconds instead of sitting on "Loading…" forever.',
       'If the loading screen is still showing after 10 seconds, it now offers Reload and Sign in again buttons — and shows the app version, so a stuck screen can be identified at a glance.',
       'New theme in Settings → Appearance: Emilia\'s Paper — a handwritten paper calendar with ink, highlighter, and a hand-drawn grid, like the paper calendar on the kitchen counter.',
+      'In Emilia\'s Paper, a multi-day event now shows as one connected highlighter strip across its days, instead of a separate block on each day.',
     ],
   },
   {

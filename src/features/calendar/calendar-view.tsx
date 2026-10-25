@@ -945,27 +945,34 @@ function EventPill({
     ? 'text-[0.84375rem] font-semibold leading-snug'
     : 'text-[0.9375rem] font-semibold leading-snug'
 
-  // Paper theme: highlighter wash instead of a pill. A banner continuation
-  // (multi-day trip) renders as Emilia's arrow, like "Zac Texas →" in her
-  // paper calendar, rather than a blank pill.
+  // Paper theme: highlighter wash instead of a pill. Multi-day banners
+  // render as ONE connected strip across the days: the negative margins
+  // stretch each day's segment to its cell edges (same mechanism as the
+  // normal theme), the title appears once at the start, and continuation
+  // days are a blank segment of the same strip — no per-day arrows.
   if (isPaper) {
     const highlight = `linear-gradient(transparent 10%, ${color}66 16%, ${color}66 84%, transparent 90%)`
+    const negMarginLeft = isBanner && !isStart ? (mode === 'month' ? '-7px' : '-9px') : undefined
+    const negMarginRight = isBanner && !isEnd ? (mode === 'month' ? '-7px' : '-9px') : undefined
+    const compPaddingLeft = isBanner && !isStart && showTitle
+      ? (mode === 'month' ? '11px' : mode === '3week' ? '15px' : '17px')
+      : undefined
     return (
       <div
         className="flex items-stretch overflow-hidden flex-shrink-0 cursor-pointer active:opacity-70 transition-opacity"
-        style={{ background: highlight }}
+        style={{ background: highlight, marginLeft: negMarginLeft, marginRight: negMarginRight }}
         title={ev.title}
         onClick={e => { e.stopPropagation(); onSelect?.(ev) }}
       >
-        <div className={`flex items-center ${padding} min-w-0 flex-1`}>
+        <div
+          className={`flex items-center ${padding} min-w-0 flex-1`}
+          style={compPaddingLeft ? { paddingLeft: compPaddingLeft } : undefined}
+        >
           <span className={`truncate uppercase ${textSize}`} style={{ color: '#1E1E1E' }}>
-            {isBanner && !showTitle ? (
-              '→'
-            ) : showTitle ? (
+            {showTitle ? (
               <>
                 {showTime && <span>{timeStr} </span>}
                 {displayTitle}
-                {isBanner && !isEnd ? ' →' : ''}
               </>
             ) : (
               '\u00A0'
