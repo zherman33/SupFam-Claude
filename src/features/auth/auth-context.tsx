@@ -85,6 +85,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Get initial session — the catch matters: if getSession rejects
     // (corrupt stored session, storage failure), loading must still clear
     // or the app hangs on the splash forever with no way to sign in again.
+    // Same for a promise that never settles at all (blocked storage /
+    // stalled network): after 8s, fall through to the sign-in screen.
+    // If getSession does resolve later with a valid session, that
+    // setSession still lands and the app proceeds to the dashboard.
+    const sessionTimeoutId = window.setTimeout(() => {
+      setSession(null)
+      setLoading(false)
+    }, 8000)
     supabase.auth
       .getSession()
       .then(({ data: { session } }) => {
@@ -94,6 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(null)
       })
       .finally(() => {
+        window.clearTimeout(sessionTimeoutId)
         setLoading(false)
       })
 

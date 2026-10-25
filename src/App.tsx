@@ -10,6 +10,7 @@ import { Paywall } from '@/features/billing/paywall'
 import { Dashboard } from '@/features/dashboard/dashboard'
 import { InstallPrompt } from '@/features/pwa/install-prompt'
 import { track } from '@/lib/telemetry'
+import { APP_VERSION } from '@/lib/version'
 import { useIsStaff } from '@/features/admin/use-is-staff'
 import { UxDashboard } from '@/features/admin/ux-dashboard'
 
@@ -18,7 +19,15 @@ import { openSettings } from '@/features/settings/settings-events'
 import { KioskView } from '@/features/kiosk/kiosk-view'
 
 export default function App() {
-  const { user, loading } = useAuth()
+  const { user, loading, signOut } = useAuth()
+  // Escape hatch: if the splash is still showing after 10s, something
+  // upstream never settled (session, member record, or onboarding
+  // counts). Offer a way out instead of an infinite "Loading…".
+  const [showStuck, setShowStuck] = useState(false)
+  useEffect(() => {
+    const id = window.setTimeout(() => setShowStuck(true), 10_000)
+    return () => window.clearTimeout(id)
+  }, [])
   const queryClient = useQueryClient()
   // isFetching: actively in-flight. isLoading: no data yet AND fetching.
   // We only block on loading if the auth state is still resolving, or
@@ -115,8 +124,37 @@ export default function App() {
     (user && familyMember && onboardingStep === null)
   ) {
     return wrap(
-      <div className="flex min-h-svh items-center justify-center bg-cream-100">
+      <div className="flex min-h-svh flex-col items-center justify-center gap-3 bg-cream-100 px-6 text-center">
         <p className="font-handwritten text-2xl text-terracotta-500">Loading…</p>
+        <p className="text-xs text-stone-400">{APP_VERSION}</p>
+        {showStuck && (
+          <div className="mt-4 flex flex-col items-center gap-2">
+            <p className="text-sm text-stone-500">
+              This is taking longer than usual.
+            </p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="rounded-full bg-terracotta-500 px-5 py-2 text-sm font-medium text-white"
+            >
+              Reload
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await signOut()
+                } catch {
+                  // Sign-out failing must not block the reload.
+                }
+                window.location.reload()
+              }}
+              className="text-sm font-medium text-stone-500 underline"
+            >
+              Sign in again instead
+            </button>
+          </div>
+        )}
       </div>
     )
   }

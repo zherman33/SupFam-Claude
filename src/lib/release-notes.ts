@@ -21,6 +21,15 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: 'v1.2.5',
+    date: 'Oct 25, 2026',
+    headline: 'The loading screen can no longer trap you.',
+    notes: [
+      'If the saved sign-in takes too long to read, the app now falls through to the sign-in screen after 8 seconds instead of sitting on "Loading…" forever.',
+      'If the loading screen is still showing after 10 seconds, it now offers Reload and Sign in again buttons — and shows the app version, so a stuck screen can be identified at a glance.',
+    ],
+  },
+  {
     version: 'v1.2.4',
     date: 'Oct 24, 2026',
     headline: 'The dashboard lists are back out in the open.',
