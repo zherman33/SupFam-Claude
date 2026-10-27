@@ -359,6 +359,25 @@ function ConnectedCalendarsSection() {
     byOwner.get(ownerName)!.push(cal)
   }
 
+  // Count calendar names so duplicates (e.g. two "MJI"s) get a
+  // disambiguating calendar-ID subtitle on their cards.
+  const nameCounts = new Map<string, number>()
+  for (const cal of calendars ?? []) {
+    const key = (cal.calendar_name ?? cal.calendar_id).toLowerCase()
+    nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1)
+  }
+
+  // Account email per family member, so every card can say whose account
+  // it came from even when the row itself stores no email (non-primary
+  // calendars never had one stamped).
+  const memberAccountEmail = new Map<string, string>()
+  for (const cal of calendars ?? []) {
+    const email = [cal.account_email, cal.google_account_email].find(e => e?.includes('@'))
+    if (email && !memberAccountEmail.has(cal.family_member_id)) {
+      memberAccountEmail.set(cal.family_member_id, email)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Section Banner */}
@@ -423,6 +442,10 @@ function ConnectedCalendarsSection() {
                 <ConnectedCalendarCard
                   key={cal.id}
                   calendar={cal}
+                  accountEmail={memberAccountEmail.get(cal.family_member_id)}
+                  showCalendarId={
+                    (nameCounts.get((cal.calendar_name ?? cal.calendar_id).toLowerCase()) ?? 0) > 1
+                  }
                   onUpdateColor={color =>
                     updateColor.mutate({ id: cal.id, color, calendar_id: cal.calendar_id })
                   }
@@ -440,9 +463,13 @@ function ConnectedCalendarsSection() {
 
 function ConnectedCalendarCard({
   calendar,
+  accountEmail,
+  showCalendarId,
   onUpdateColor,
 }: {
   calendar: ConnectedCalendar
+  accountEmail?: string
+  showCalendarId?: boolean
   onUpdateColor: (color: string) => void
 }) {
   const [editingColor, setEditingColor] = useState(false)
@@ -450,6 +477,12 @@ function ConnectedCalendarCard({
   const deleteCal = useDeleteConnectedCalendar()
   const toggleQuickToggle = useToggleQuickToggle()
   const toggleVisibility = useToggleCalendarVisibility()
+
+  // Whose account this calendar came from — the row's own email first,
+  // then any email known for this family member, so the card never shows
+  // a bare duplicate name with no attribution.
+  const attribution =
+    calendar.account_email ?? calendar.google_account_email ?? accountEmail ?? 'Unknown account'
 
   const handleSaveColor = () => {
     onUpdateColor(selectedColor)
@@ -497,8 +530,9 @@ function ConnectedCalendarCard({
                 {calendar.provider}
               </span>
             </div>
-            {calendar.account_email && (
-              <p className="text-xs text-brown-700/50 mt-0.5 truncate">{calendar.account_email}</p>
+            <p className="text-xs text-brown-700/50 mt-0.5 truncate">{attribution}</p>
+            {showCalendarId && (
+              <p className="text-xs text-brown-700/40 mt-0.5 truncate">{calendar.calendar_id}</p>
             )}
           </div>
         </div>

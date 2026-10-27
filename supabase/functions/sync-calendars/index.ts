@@ -106,12 +106,18 @@ Deno.serve(async (req) => {
         // Fetch existing connected calendars to preserve user customizations (color and visibility)
         const { data: existingCals } = await supabase
           .from("connected_calendars")
-          .select("calendar_id, color, is_visible")
+          .select("calendar_id, color, is_visible, google_account_email")
           .eq("family_member_id", tok.family_member_id)
 
-        const existingMap = new Map<string, { color: string | null; is_visible: boolean }>(
+        const existingMap = new Map<string, { color: string | null; is_visible: boolean; google_account_email: string | null }>(
           (existingCals ?? []).map((c: any) => [c.calendar_id, c])
         )
+
+        // The primary calendar's ID is the Google account email — stamp it on
+        // every row for this member so Settings can always say whose account
+        // a calendar came from (previously only the primary row carried it,
+        // leaving every other calendar unattributed).
+        const primaryAccountEmail = (calendars.find((c: any) => c.primary)?.id as string | undefined) ?? null
 
         // Upsert each calendar into connected_calendars
         for (const cal of calendars) {
@@ -128,7 +134,7 @@ Deno.serve(async (req) => {
               calendar_name: calendarName,
               color: colorToUse,
               is_visible: isVisibleToUse,
-              google_account_email: cal.primary ? cal.id : (cal.id === "primary" ? calendarName : null),
+              google_account_email: primaryAccountEmail ?? existing?.google_account_email ?? null,
             },
             { onConflict: "family_member_id,calendar_id" }
           )

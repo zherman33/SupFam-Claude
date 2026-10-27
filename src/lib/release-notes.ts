@@ -21,6 +21,15 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: 'v1.2.6',
+    date: 'Oct 26, 2026',
+    headline: 'Every calendar now says whose account it came from.',
+    notes: [
+      'In Settings → Calendars, each calendar now shows the account email it belongs to — and when two calendars share a name, it also shows the calendar ID so duplicates can be told apart.',
+      'Calendar sync now stamps the account email on every calendar, not just the primary one, so the attribution stays correct.',
+    ],
+  },
+  {
     version: 'v1.2.5',
     date: 'Oct 25, 2026',
     headline: 'The loading screen can no longer trap you.',
