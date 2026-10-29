@@ -14,6 +14,7 @@ import {
   useDeleteConnectedCalendar,
   useToggleQuickToggle,
   useToggleCalendarVisibility,
+  useUpdateCalendarGroup,
   type ConnectedCalendar,
 } from '@/features/calendar/use-calendar'
 import { AddCalendarModal } from '@/features/calendar/add-calendar-modal'
@@ -367,6 +368,15 @@ function ConnectedCalendarsSection() {
     nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1)
   }
 
+  // Existing pill group names, offered as suggestions when grouping a card.
+  const existingGroups = [
+    ...new Set(
+      (calendars ?? [])
+        .map((cal) => cal.pill_group?.trim())
+        .filter((g): g is string => !!g)
+    ),
+  ]
+
   // Account email per family member, so every card can say whose account
   // it came from even when the row itself stores no email (non-primary
   // calendars never had one stamped).
@@ -443,6 +453,7 @@ function ConnectedCalendarsSection() {
                   key={cal.id}
                   calendar={cal}
                   accountEmail={memberAccountEmail.get(cal.family_member_id)}
+                  existingGroups={existingGroups}
                   showCalendarId={
                     (nameCounts.get((cal.calendar_name ?? cal.calendar_id).toLowerCase()) ?? 0) > 1
                   }
@@ -464,11 +475,13 @@ function ConnectedCalendarsSection() {
 function ConnectedCalendarCard({
   calendar,
   accountEmail,
+  existingGroups,
   showCalendarId,
   onUpdateColor,
 }: {
   calendar: ConnectedCalendar
   accountEmail?: string
+  existingGroups: string[]
   showCalendarId?: boolean
   onUpdateColor: (color: string) => void
 }) {
@@ -477,6 +490,10 @@ function ConnectedCalendarCard({
   const deleteCal = useDeleteConnectedCalendar()
   const toggleQuickToggle = useToggleQuickToggle()
   const toggleVisibility = useToggleCalendarVisibility()
+  const updateGroup = useUpdateCalendarGroup()
+  // The pill_group column only exists once the v1.2.7 database update has
+  // been run — until then the row carries no such key at all.
+  const pillGroupSupported = 'pill_group' in calendar
 
   // Whose account this calendar came from — the row's own email first,
   // then any email known for this family member, so the card never shows
@@ -621,6 +638,44 @@ function ConnectedCalendarCard({
           )}
         </div>
       </div>
+
+      {/* Pill group: calendars sharing one group name share one home pill */}
+      {pillGroupSupported ? (
+        <div className="mt-3 flex items-center gap-2">
+          <label
+            htmlFor={`pill-group-${calendar.id}`}
+            className="text-xs font-semibold text-brown-700/60 flex-shrink-0"
+          >
+            Pill group
+          </label>
+          <input
+            id={`pill-group-${calendar.id}`}
+            type="text"
+            defaultValue={calendar.pill_group ?? ''}
+            list={`pill-group-options-${calendar.id}`}
+            placeholder="No group"
+            onBlur={(e) => {
+              const next = e.target.value.trim() || null
+              if (next !== (calendar.pill_group ?? null)) {
+                updateGroup.mutate({ id: calendar.id, pill_group: next })
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.currentTarget.blur()
+            }}
+            className="min-w-0 flex-1 rounded-xl border border-sand-200 bg-cream-50 px-3 py-1.5 text-xs text-brown-800 placeholder:text-brown-700/40"
+          />
+          <datalist id={`pill-group-options-${calendar.id}`}>
+            {existingGroups.map((g) => (
+              <option key={g} value={g} />
+            ))}
+          </datalist>
+        </div>
+      ) : (
+        <p className="mt-3 text-xs text-brown-700/40">
+          Pill groups need the v1.2.7 database update to be run first.
+        </p>
+      )}
 
       {/* Expandable Color Picker Drawer within the Card (hex lives here, not on the card) */}
       {editingColor && (

@@ -212,6 +212,7 @@ export interface Database {
           color: string | null
           is_visible: boolean
           is_quick_toggle: boolean
+          pill_group: string | null
           last_synced_at: string | null
           created_at: string
           ics_url: string | null
@@ -229,6 +230,7 @@ export interface Database {
           color?: string | null
           is_visible?: boolean
           is_quick_toggle?: boolean
+          pill_group?: string | null
           last_synced_at?: string | null
           created_at?: string
           ics_url?: string | null
@@ -246,6 +248,7 @@ export interface Database {
           color?: string | null
           is_visible?: boolean
           is_quick_toggle?: boolean
+          pill_group?: string | null
           last_synced_at?: string | null
           created_at?: string
           ics_url?: string | null

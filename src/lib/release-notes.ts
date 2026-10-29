@@ -21,6 +21,15 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: 'v1.2.7',
+    date: 'Oct 29, 2026',
+    headline: 'Calendars can now be grouped under one home pill.',
+    notes: [
+      'In Settings → Calendars, give calendars a pill group name — for example, put MJI and UT Incubator in a group called MJI — and they share one pill on the home screen that turns them all on or off together.',
+      'Grouped calendars no longer show separate pills; the group pill replaces them.',
+    ],
+  },
+  {
     version: 'v1.2.6',
     date: 'Oct 26, 2026',
     headline: 'Every calendar now says whose account it came from.',

@@ -11,9 +11,12 @@ import type { Task } from '@/features/tasks/use-tasks'
 import {
   useConnectedCalendars,
   useToggleCalendarVisibility,
+  useToggleCalendarGroupVisibility,
+  getPillGroups,
   getEventDateBounds,
   type CalendarEvent,
   type ConnectedCalendar,
+  type PillGroup,
   type EventDateBounds,
 } from './use-calendar'
 import { useEventColorRules, applyColorRules, type EventColorRule } from '@/features/settings/use-event-color-rules'
@@ -77,6 +80,7 @@ export function CalendarView({
   const { data: colorRules } = useEventColorRules()
   const { data: connectedCalendars } = useConnectedCalendars()
   const toggleVisibility = useToggleCalendarVisibility()
+  const toggleGroupVisibility = useToggleCalendarGroupVisibility()
 
   const calColorMap = useMemo(() => {
     const m = new Map<string, string>()
@@ -87,7 +91,11 @@ export function CalendarView({
     }
     return m
   }, [connectedCalendars])
-  const quickToggleCalendars = (connectedCalendars ?? []).filter(c => c.is_quick_toggle)
+  const ungroupedPills = (connectedCalendars ?? []).filter(
+    (c) => c.is_quick_toggle && !c.pill_group?.trim()
+  )
+  const pillGroups = getPillGroups(connectedCalendars ?? [])
+  const hasPills = ungroupedPills.length > 0 || pillGroups.length > 0
 
   // Event form state
   const [formDate, setFormDate] = useState<Date | null>(null)
@@ -418,14 +426,23 @@ export function CalendarView({
               ))}
             </div>
           )}
-          {quickToggleCalendars.length > 0 && (
+          {hasPills && (
             <span className="w-px h-5 bg-sand-200 flex-shrink-0" aria-hidden="true" />
           )}
-          {quickToggleCalendars.map(cal => (
+          {ungroupedPills.map(cal => (
             <QuickTogglePill
               key={cal.id}
               cal={cal}
               onToggle={(id, is_visible) => toggleVisibility.mutate({ id, is_visible })}
+            />
+          ))}
+          {pillGroups.map(group => (
+            <GroupTogglePill
+              key={group.name.toLowerCase()}
+              group={group}
+              onToggle={(ids, is_visible) =>
+                toggleGroupVisibility.mutate({ ids, is_visible })
+              }
             />
           ))}
           {headerRight}
@@ -850,6 +867,49 @@ function QuickTogglePill({
       />
       <span className="truncate max-w-[120px]">
         {cal.calendar_name ?? cal.calendar_id}
+      </span>
+    </button>
+  )
+}
+
+// Pill for a user-defined calendar group: one pill toggles every member
+// calendar on or off together.
+function GroupTogglePill({
+  group,
+  onToggle,
+}: {
+  group: PillGroup
+  onToggle: (ids: string[], is_visible: boolean) => void
+}) {
+  const color = group.calendars[0]?.color ?? '#C4714F'
+  const isVisible = group.allVisible
+  const ids = group.calendars.map((c) => c.id)
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(ids, !isVisible)}
+      title={`${group.name} (${group.calendars.length} calendars — ${isVisible ? 'currently visible — click to hide' : 'currently hidden — click to show'})`}
+      className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex-shrink-0 ${
+        isVisible
+          ? 'shadow-sm active:scale-95'
+          : 'bg-white border border-sand-200 text-brown-700/50 hover:bg-cream-50 hover:text-brown-700 active:scale-95'
+      }`}
+      style={
+        isVisible
+          ? {
+              backgroundColor: `${color}18`,
+              border: `1px solid ${color}40`,
+              color: darkenForReadability(color),
+            }
+          : undefined
+      }
+    >
+      <span
+        className={`h-2 w-2 rounded-full flex-shrink-0 transition-opacity ${isVisible ? 'opacity-100' : 'opacity-40'}`}
+        style={{ backgroundColor: color }}
+      />
+      <span className="truncate max-w-[120px]">
+        {group.name} · {group.calendars.length}
       </span>
     </button>
   )

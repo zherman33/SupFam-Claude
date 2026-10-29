@@ -28,6 +28,8 @@ export interface ConnectedCalendar {
   color: string | null
   is_visible: boolean
   is_quick_toggle?: boolean
+  /** User-defined pill group name — rows sharing one name share one home pill. */
+  pill_group?: string | null
   is_default: boolean
   last_synced_at: string | null
   ics_url?: string | null
@@ -318,6 +320,109 @@ export function useToggleQuickToggle() {
       }, 500)
     },
   })
+}
+
+// ─── Toggle a whole pill group's visibility at once ─────────────────────
+export function useToggleCalendarGroupVisibility() {
+  const queryClient = useQueryClient()
+  const { data: member } = useFamilyMember()
+
+  return useMutation({
+    mutationFn: async ({ ids, is_visible }: { ids: string[]; is_visible: boolean }) => {
+      if (ids.length === 0) return
+      const { error } = await supabase
+        .from('connected_calendars')
+        .update({ is_visible })
+        .in('id', ids)
+      if (error) throw error
+    },
+    onMutate: async ({ ids, is_visible }) => {
+      await queryClient.cancelQueries({ queryKey: ['connected-calendars', member?.family_id] })
+      const prev = queryClient.getQueryData<ConnectedCalendar[]>(['connected-calendars', member?.family_id])
+      const idSet = new Set(ids)
+      queryClient.setQueryData<ConnectedCalendar[]>(
+        ['connected-calendars', member?.family_id],
+        (old) => old?.map((c) => (idSet.has(c.id) ? { ...c, is_visible } : c)) ?? []
+      )
+      return { prev }
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['connected-calendars', member?.family_id], ctx.prev)
+    },
+    onSuccess: () => {
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['connected-calendars', member?.family_id] })
+      }, 500)
+    },
+  })
+}
+
+// ─── Assign a calendar to a pill group (null = ungrouped) ────────────────
+export function useUpdateCalendarGroup() {
+  const queryClient = useQueryClient()
+  const { data: member } = useFamilyMember()
+
+  return useMutation({
+    mutationFn: async ({ id, pill_group }: { id: string; pill_group: string | null }) => {
+      const { error } = await supabase
+        .from('connected_calendars')
+        .update({ pill_group })
+        .eq('id', id)
+      if (error) throw error
+    },
+    onMutate: async ({ id, pill_group }) => {
+      await queryClient.cancelQueries({ queryKey: ['connected-calendars', member?.family_id] })
+      const prev = queryClient.getQueryData<ConnectedCalendar[]>(['connected-calendars', member?.family_id])
+      queryClient.setQueryData<ConnectedCalendar[]>(
+        ['connected-calendars', member?.family_id],
+        (old) => old?.map((c) => (c.id === id ? { ...c, pill_group } : c)) ?? []
+      )
+      return { prev }
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['connected-calendars', member?.family_id], ctx.prev)
+    },
+    onSuccess: () => {
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['connected-calendars', member?.family_id] })
+      }, 500)
+    },
+  })
+}
+
+/** A user-defined pill group: every row sharing one pill_group value. */
+export interface PillGroup {
+  /** Display name, taken from the first row seen (preserves casing). */
+  name: string
+  calendars: ConnectedCalendar[]
+  /** True when at least one member is pinned to the home pill row. */
+  isPinned: boolean
+  /** True when every member is currently visible. */
+  allVisible: boolean
+}
+
+/**
+ * Collect pill groups from the connected calendars. A group only gets a
+ * home-screen pill when at least one of its members is pinned
+ * (is_quick_toggle); grouped calendars never render individual pills, so
+ * one pill always toggles the whole group together.
+ */
+export function getPillGroups(calendars: ConnectedCalendar[]): PillGroup[] {
+  const byKey = new Map<string, PillGroup>()
+  for (const cal of calendars) {
+    const raw = cal.pill_group?.trim()
+    if (!raw) continue
+    const key = raw.toLowerCase()
+    let group = byKey.get(key)
+    if (!group) {
+      group = { name: raw, calendars: [], isPinned: false, allVisible: true }
+      byKey.set(key, group)
+    }
+    group.calendars.push(cal)
+    if (cal.is_quick_toggle) group.isPinned = true
+    if (!cal.is_visible) group.allVisible = false
+  }
+  return [...byKey.values()].filter((g) => g.isPinned)
 }
 
 // ─── Trigger a calendar sync via Edge Function ────────────────────────────
