@@ -21,6 +21,8 @@ import {
   useDeleteEvent,
   useSetDefaultCalendar,
   useDefaultCalendar,
+  getRecurringBaseId,
+  type DeleteScope,
 } from './use-write-event'
 
 interface EventFormProps {
@@ -307,7 +309,13 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
   // unreliable in embedded webviews and gives no feedback on failure).
   const [confirmingDelete, setConfirmingDelete] = useState(false)
 
-  const handleDelete = async () => {
+  // A recurring instance offers a series choice on the confirming tap:
+  // "This one" keeps the old single-instance delete, "Whole series"
+  // deletes the base event in Google and every instance row in Sup Fam,
+  // so an organizer cancelling a series clears it for participants too.
+  const isRecurringInstance = !!event?.external_event_id && getRecurringBaseId(event.external_event_id) !== null
+
+  const handleDelete = async (scope: DeleteScope = 'single') => {
     if (!event?.external_event_id) {
       setError("This event can't be deleted from here — it has no calendar ID.")
       return
@@ -331,6 +339,7 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
         eventId: event.external_event_id,
         calendarId: targetCal.calendar_id,
         familyMemberId: targetCal.family_member_id,
+        scope,
       })
       onClose()
     } catch (err: any) {
@@ -384,22 +393,43 @@ export function EventForm({ initialDate, event, onClose }: EventFormProps) {
           </h2>
           <div className="flex items-center gap-2">
             {isEdit && !sourceIsReadOnly && (
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={isPending}
-                className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40 ${
-                  confirmingDelete
-                    ? 'bg-red-500 text-white hover:bg-red-600'
-                    : 'text-red-500 hover:bg-red-50'
-                }`}
-              >
-                {deleteEvent.isPending
-                  ? 'Deleting…'
-                  : confirmingDelete
-                    ? 'Tap again to confirm'
-                    : 'Delete'}
-              </button>
+              confirmingDelete && isRecurringInstance ? (
+                <span className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleDelete('single')}
+                    disabled={isPending}
+                    className="rounded-xl bg-red-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-600 disabled:opacity-40"
+                  >
+                    {deleteEvent.isPending ? 'Deleting…' : 'This one only'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete('series')}
+                    disabled={isPending}
+                    className="rounded-xl bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-800 disabled:opacity-40"
+                  >
+                    Whole series
+                  </button>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleDelete('single')}
+                  disabled={isPending}
+                  className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40 ${
+                    confirmingDelete
+                      ? 'bg-red-500 text-white hover:bg-red-600'
+                      : 'text-red-500 hover:bg-red-50'
+                  }`}
+                >
+                  {deleteEvent.isPending
+                    ? 'Deleting…'
+                    : confirmingDelete
+                      ? 'Tap again to confirm'
+                      : 'Delete'}
+                </button>
+              )
             )}
             <button
               onClick={onClose}

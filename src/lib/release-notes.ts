@@ -21,6 +21,14 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: 'v1.2.8',
+    date: 'Nov 2, 2026',
+    headline: 'Deleting a recurring event now offers the whole series.',
+    notes: [
+      'When you delete an event that repeats, you can now choose “This one only” or “Whole series” — the whole-series choice removes every future occurrence for the whole family, not just the one day you tapped.',
+    ],
+  },
+  {
     version: 'v1.2.7',
     date: 'Oct 29, 2026',
     headline: 'Calendars can now be grouped under one home pill.',

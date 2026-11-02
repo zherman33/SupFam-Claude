@@ -13,6 +13,24 @@ Deno.serve(async (req) => {
     const body = await req.json()
     const { action, family_member_id, calendar_id, event } = body
 
+    // Series-aware delete: a recurring instance ID looks like
+    // "<base>_<date-or-datetime>" (the same shape use-calendar.ts strips
+    // for dedup). With scope="series", delete the base event instead of
+    // the one instance — in Google, deleting the base deletes the whole
+    // series, so an organizer cancelling a series also clears it for
+    // every participant. Default (no scope) keeps the old single-instance
+    // behaviour, so deleting one Tuesday never silently wipes the series.
+    const deleteScope: string = body.scope ?? (event as any)?.delete_scope ?? "single"
+    function recurringBaseId(id: string): string | null {
+      const parts = id.split("_")
+      if (parts.length < 2) return null
+      const last = parts[parts.length - 1]
+      if (/^(\d{8}(T\d{6}Z?)?|\d{4}-\d{2}-\d{2})$/.test(last)) {
+        return parts.slice(0, -1).join("_")
+      }
+      return null
+    }
+
     if (!action || !family_member_id || !calendar_id) {
       return jsonResp({ error: "Missing: action, family_member_id, calendar_id" }, 400)
     }
@@ -38,6 +56,12 @@ Deno.serve(async (req) => {
     // ── DELETE ────────────────────────────────────────────────────────────
     if (action === "delete") {
       if (!event?.id) return jsonResp({ error: "event.id required" }, 400)
+
+      // Series scope: delete the base event, not the one instance, so the
+      // whole series (and every participant's copy of it) goes away.
+      const isSeriesDelete = deleteScope === "series"
+      const baseId = isSeriesDelete ? (recurringBaseId(event.id) ?? event.id) : event.id
+      const googleDeleteId = baseId
 
       // A Google event ID is shared by every calendar carrying the event
       // (organizer + each attendee's copy). Deleting just one copy would
@@ -92,7 +116,7 @@ Deno.serve(async (req) => {
           continue
         }
         const res = await fetch(
-          `${GCAL}/${encodeURIComponent(t.calendarId)}/events/${encodeURIComponent(event.id)}?sendUpdates=none`,
+          `${GCAL}/${encodeURIComponent(t.calendarId)}/events/${encodeURIComponent(googleDeleteId)}?sendUpdates=none`,
           { method: "DELETE", headers: authHeaders(tokAccess) }
         )
         if (res.ok) {
@@ -108,9 +132,24 @@ Deno.serve(async (req) => {
         return jsonResp({ error: errors.join("; ") || "Delete failed" }, 502)
       }
 
-      let localDel = supabase.from("calendar_events").delete().eq("external_event_id", event.id)
-      if (familyId) localDel = localDel.eq("family_id", familyId)
-      await localDel
+      if (isSeriesDelete) {
+        // Remove the base row (if any) and every expanded instance row
+        // for this series — a series delete that only removed the exact
+        // ID would leave every other Tuesday in Sup Fam, which was the
+        // 2026-11-02 Gigi Swim bug. Underscores are escaped in the LIKE
+        // pattern so they match literally, not as single-char wildcards.
+        const likePattern = baseId.replace(/_/g, "\\_") + "_%"
+        let seriesDel = supabase
+          .from("calendar_events")
+          .delete()
+          .or(`external_event_id.eq.${baseId},external_event_id.like.${likePattern}`)
+        if (familyId) seriesDel = seriesDel.eq("family_id", familyId)
+        await seriesDel
+      } else {
+        let localDel = supabase.from("calendar_events").delete().eq("external_event_id", event.id)
+        if (familyId) localDel = localDel.eq("family_id", familyId)
+        await localDel
+      }
       return jsonResp({ success: true })
     }
 

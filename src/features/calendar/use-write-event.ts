@@ -15,11 +15,25 @@ export interface EventWrite {
   timezone?: string
 }
 
+export type DeleteScope = 'single' | 'series'
+
+/** Strip a recurring-instance suffix ("_<date-or-datetime>") to its base ID, or null if not an instance. */
+export function getRecurringBaseId(eventId: string): string | null {
+  const parts = eventId.split('_')
+  if (parts.length < 2) return null
+  const last = parts[parts.length - 1]
+  if (/^(\d{8}(T\d{6}Z?)?|\d{4}-\d{2}-\d{2})$/.test(last)) {
+    return parts.slice(0, -1).join('_')
+  }
+  return null
+}
+
 async function invokeWriteEvent(payload: {
   action: 'create' | 'update' | 'delete'
   family_member_id: string
   calendar_id: string
   event: EventWrite
+  scope?: DeleteScope
 }) {
   const { data: { session } } = await supabase.auth.getSession()
   const res = await supabase.functions.invoke('write-event', {
@@ -164,22 +178,33 @@ export function useDeleteEvent() {
       eventId,
       calendarId,
       familyMemberId,
+      scope = 'single',
     }: {
       eventId: string
       calendarId: string
       familyMemberId: string
+      scope?: DeleteScope
     }) => {
       const deletePromise = invokeWriteEvent({
         action: 'delete',
         family_member_id: familyMemberId,
         calendar_id: calendarId,
         event: { id: eventId, title: '', start: '', end: '', all_day: false },
+        scope,
       })
-      
-      const localDeletePromise = supabase
-        .from('calendar_events')
-        .delete()
-        .eq('external_event_id', eventId)
+
+      // Series scope removes every expanded instance row, not just the
+      // one tapped — otherwise the other Tuesdays survive in Sup Fam.
+      const baseId = scope === 'series' ? getRecurringBaseId(eventId) : null
+      const localDeletePromise = baseId
+        ? supabase
+            .from('calendar_events')
+            .delete()
+            .or(`external_event_id.eq.${baseId},external_event_id.like.${baseId.replace(/_/g, '\\_')}_%`)
+        : supabase
+            .from('calendar_events')
+            .delete()
+            .eq('external_event_id', eventId)
 
       const [result] = await Promise.all([deletePromise, localDeletePromise])
 
@@ -194,13 +219,18 @@ export function useDeleteEvent() {
     },
     // Optimistic removal: the event disappears from the calendar instantly.
     // Rolls back if the delete fails (the form then shows the error).
-    onMutate: async ({ eventId }) => {
+    onMutate: async ({ eventId, scope = 'single' }) => {
       const queryKey = ['calendar-events', member?.family_id]
       await queryClient.cancelQueries({ queryKey })
       const previous = queryClient.getQueryData(queryKey)
+      const baseId = scope === 'series' ? getRecurringBaseId(eventId) : null
       queryClient.setQueryData(queryKey, (old: unknown) =>
         Array.isArray(old)
-          ? old.filter((ev: any) => ev.external_event_id !== eventId)
+          ? old.filter((ev: any) =>
+              baseId
+                ? !(ev.external_event_id === baseId || (ev.external_event_id ?? '').startsWith(baseId + '_'))
+                : ev.external_event_id !== eventId
+            )
           : old
       )
       return { previous }
