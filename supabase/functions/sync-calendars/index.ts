@@ -339,7 +339,11 @@ Deno.serve(async (req) => {
         if (!member) continue
 
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 8000)
+        // MJI's Outlook feed is large (busy work calendar, recurring forever)
+        // and 8s was aborting its fetch in the edge function while smaller
+        // feeds like UT Incubator succeeded. Apple Calendar has no such
+        // limit, which is why the same link works there.
+        const timeoutId = setTimeout(() => controller.abort(), 30000)
 
         try {
           if (!cal.ics_url) continue
@@ -393,7 +397,10 @@ Deno.serve(async (req) => {
               const title = unescapeIcsText(ev.SUMMARY) || "(No title)"
               const startInfo = parseIcsDate(ev.DTSTART, ev.DTSTART_TZID)
               const startAt = startInfo ? startInfo.iso : ""
-              uid = `ics_gen_${btoa(startAt + title).slice(0, 32)}`
+              // btoa throws on non-Latin1 titles (accents, emoji), which
+              // would abort the whole calendar's sync. Encode as UTF-8
+              // bytes first; identical to btoa for plain ASCII titles.
+              uid = `ics_gen_${btoa(Array.from(new TextEncoder().encode(startAt + title), (b) => String.fromCharCode(b)).join("")).slice(0, 32)}`
             }
             if (!eventsByUid.has(uid)) {
               eventsByUid.set(uid, [])
